@@ -2,9 +2,14 @@ name: Daily Job Newsletter
 
 on:
   schedule:
-    # Runs every day at 8:00 AM IST (2:30 AM UTC)
+
+    # 8:00 AM IST (2:30 AM UTC)
     - cron: "30 2 * * *"
-  # Allow manual trigger from GitHub Actions tab
+
+    # 8:00 PM IST (2:30 PM UTC)
+    - cron: "30 14 * * *"
+
+  # Manual trigger
   workflow_dispatch:
 
 jobs:
@@ -26,11 +31,15 @@ jobs:
 
       - name: Run job agent
         env:
-          APIFY_TOKEN:       ${{ secrets.APIFY_TOKEN }}
+          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-          RECIPIENT_EMAIL:   ${{ secrets.RECIPIENT_EMAIL }}
-          SENDER_EMAIL:      ${{ secrets.SENDER_EMAIL }}
-          EMAIL_API_KEY:     ${{ secrets.EMAIL_API_KEY }}
-          EMAIL_PROVIDER:    ${{ secrets.EMAIL_PROVIDER }}
-          MIN_SCORE:         "70"
+          RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL }}
+          SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
+          EMAIL_API_KEY: ${{ secrets.EMAIL_API_KEY }}
+          EMAIL_PROVIDER: ${{ secrets.EMAIL_PROVIDER }}
+          TOP_N: ${{ secrets.TOP_N }}
+          MIN_SCORE: ${{ secrets.MIN_SCORE }}
+
+          
+
         run: python job_agent.py
