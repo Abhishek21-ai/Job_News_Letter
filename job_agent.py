@@ -127,7 +127,7 @@ def scrape_linkedin_jobs() -> list[dict]:
 
     payload = {
         "urls": LINKEDIN_SEARCH_URLS,
-        "count": 50,
+        "count": 25,
         "scrapeCompany": False,
     }
 
