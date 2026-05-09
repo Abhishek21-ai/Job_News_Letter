@@ -1,6 +1,6 @@
 """
 Job Newsletter Agent
-Scrapes LinkedIn jobs via Apify, scores them with Groq API,
+Scrapes LinkedIn jobs via Apify, filters + scores them with Groq,
 and sends a ranked HTML digest to your email.
 """
 
@@ -11,60 +11,79 @@ import requests
 from datetime import datetime, timezone
 from email_sender import send_newsletter
 
-# ── Config (set these as GitHub Secrets / env vars) ──────────────────────────
-APIFY_TOKEN      = os.environ["APIFY_TOKEN"]
-GROQ_API_KEY     = os.environ["GROQ_API_KEY"]
+# ── Config ────────────────────────────────────────────────────────────────────
 
-RECIPIENT_EMAIL  = os.environ["RECIPIENT_EMAIL"]
-SENDER_EMAIL     = os.environ["SENDER_EMAIL"]
-EMAIL_API_KEY    = os.environ["EMAIL_API_KEY"]
+APIFY_TOKEN = os.environ["APIFY_TOKEN"]
+GROQ_API_KEY = os.environ["GROQ_API_KEY"]
 
-EMAIL_PROVIDER   = os.environ.get("EMAIL_PROVIDER", "resend")
-MIN_SCORE        = int(os.environ.get("MIN_SCORE", "70"))
+RECIPIENT_EMAIL = os.environ["RECIPIENT_EMAIL"]
+SENDER_EMAIL = os.environ["SENDER_EMAIL"]
 
-# ── Your resume summary ──────────────────────────────────────────────────────
+EMAIL_API_KEY = os.environ["EMAIL_API_KEY"]
+EMAIL_PROVIDER = os.environ.get("EMAIL_PROVIDER", "resend")
+
+MIN_SCORE = int(os.environ.get("MIN_SCORE", "90"))
+TOP_N = int(os.environ.get("TOP_N", "5"))
+
+# ── Resume Summary ───────────────────────────────────────────────────────────
+
 RESUME_SUMMARY = """
 Name: Abhishek Pandey
 Experience: 1.5 years industry experience
 Current Role: Software Development Engineer at Modak Analytics (Client: Humana)
 
 Core Skills:
-- Python (production), FastAPI, REST APIs, Microservices, Async Programming
-- Azure Databricks, PySpark, Delta Lake, ETL/ELT pipelines
-- Azure Data Factory (ADF), ADLS Gen2, Azure SQL
-- PostgreSQL (schema design, query optimization, indexing)
-- Apache Kafka, Event-Driven Architecture
-- Redis (caching), Celery (background tasks)
-- GitHub Actions, CI/CD, Databricks Asset Bundles
-- PyTest, unit & integration testing (85%+ coverage)
-- Splunk, centralized logging
+- Python (production), FastAPI, REST APIs, Microservices
+- Azure Databricks, PySpark, Delta Lake
+- Azure Data Factory (ADF), ADLS Gen2
+- PostgreSQL, Kafka
+- Redis, Celery
+- GitHub Actions, CI/CD
+- PyTest, Splunk
 
 Certification: Databricks Certified Data Engineer Professional
-Education: M.Sc. Computer Science, Savitribai Phule Pune University (2024)
-Total YOE: ~1.5 years industry + 1.5 years freelance ML/CV
+Education: M.Sc. Computer Science
 """
 
-# ── LinkedIn search URLs ─────────────────────────────────────────────────────
+# ── LinkedIn Search URLs ─────────────────────────────────────────────────────
+
 LINKEDIN_SEARCH_URLS = [
-    # Data Engineer — Pune, last 48hrs
-    "https://www.linkedin.com/jobs/search/?keywords=Data%20Engineer&location=Pune%2C%20Maharashtra%2C%20India&f_TPR=r172800&f_E=2&position=1&pageNum=0",
+    "https://www.linkedin.com/jobs/search/?keywords=Data%20Engineer&location=Pune%2C%20Maharashtra%2C%20India&f_TPR=r172800&f_E=2",
+    "https://www.linkedin.com/jobs/search/?keywords=Backend%20Engineer%20Python%20FastAPI&location=Pune%2C%20Maharashtra%2C%20India&f_TPR=r172800&f_E=2",
+    "https://www.linkedin.com/jobs/search/?keywords=Associate%20Data%20Engineer%20Python&location=India&f_TPR=r172800&f_E=2",
+]
 
-    # Backend Engineer Python — Pune
-    "https://www.linkedin.com/jobs/search/?keywords=Backend%20Engineer%20Python%20FastAPI&location=Pune%2C%20Maharashtra%2C%20India&f_TPR=r172800&f_E=2&position=1&pageNum=0",
+# ── Smart Local Filtering ────────────────────────────────────────────────────
 
-    # Data Engineer — Bangalore
-    "https://www.linkedin.com/jobs/search/?keywords=Data%20Engineer&location=Bengaluru%2C%20Karnataka%2C%20India&f_TPR=r172800&f_E=2&position=1&pageNum=0",
+RELEVANT_KEYWORDS = [
+    "python",
+    "fastapi",
+    "backend",
+    "data engineer",
+    "databricks",
+    "pyspark",
+    "kafka",
+    "postgresql",
+    "etl",
+    "azure",
+]
 
-    # Remote Python Backend
-    "https://www.linkedin.com/jobs/search/?keywords=Associate%20Backend%20Engineer%20Python&location=India&f_TPR=r172800&f_E=2&f_WT=2&position=1&pageNum=0",
-
-    # Associate Data Engineer
-    "https://www.linkedin.com/jobs/search/?keywords=Associate%20Data%20Engineer%20Python&location=India&f_TPR=r172800&f_E=2&position=1&pageNum=0",
+EXCLUDED_KEYWORDS = [
+    "manager",
+    "director",
+    "lead",
+    "principal",
+    "architect",
+    "10+ years",
+    "12+ years",
 ]
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# SCRAPE JOBS
+# ──────────────────────────────────────────────────────────────────────────────
+
 def scrape_linkedin_jobs() -> list[dict]:
-    """Run Apify LinkedIn scraper and return raw job list."""
 
     print("🔍 Scraping LinkedIn jobs via Apify...")
 
@@ -86,8 +105,9 @@ def scrape_linkedin_jobs() -> list[dict]:
 
     print(f"  Actor run started: {run_id}")
 
-    # Poll until finished
+    # Poll until completed
     for _ in range(36):
+
         time.sleep(5)
 
         status_resp = requests.get(
@@ -116,13 +136,17 @@ def scrape_linkedin_jobs() -> list[dict]:
     return jobs
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# DEDUPLICATE
+# ──────────────────────────────────────────────────────────────────────────────
+
 def deduplicate(jobs: list[dict]) -> list[dict]:
-    """Remove duplicate job IDs."""
 
     seen = set()
     unique = []
 
     for job in jobs:
+
         jid = job.get("id") or job.get("link", "")
 
         if jid and jid not in seen:
@@ -134,66 +158,105 @@ def deduplicate(jobs: list[dict]) -> list[dict]:
     return unique
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# PREFILTER
+# ──────────────────────────────────────────────────────────────────────────────
+
+def prefilter_jobs(jobs: list[dict]) -> list[dict]:
+
+    filtered = []
+
+    for job in jobs:
+
+        text = (
+            f"{job.get('title', '')} "
+            f"{job.get('descriptionText', '')}"
+        ).lower()
+
+        # Must contain relevant keywords
+        if not any(k in text for k in RELEVANT_KEYWORDS):
+            continue
+
+        # Exclude senior roles
+        if any(k in text for k in EXCLUDED_KEYWORDS):
+            continue
+
+        filtered.append(job)
+
+    print(f"🔍 Prefiltered to {len(filtered)} relevant jobs")
+
+    return filtered
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# GROQ REQUEST WITH RETRY
+# ──────────────────────────────────────────────────────────────────────────────
+
+def groq_request(headers, body, retries=5):
+
+    for attempt in range(retries):
+
+        r = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers=headers,
+            json=body,
+            timeout=30,
+        )
+
+        # Handle rate limits
+        if r.status_code == 429:
+
+            wait = 2 ** attempt
+
+            print(f"    ⏳ Rate limited. Waiting {wait}s...")
+
+            time.sleep(wait)
+
+            continue
+
+        r.raise_for_status()
+
+        return r
+
+    raise Exception("Groq rate limit exceeded after retries")
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# SCORE JOB
+# ──────────────────────────────────────────────────────────────────────────────
+
 def score_job_with_groq(job: dict) -> dict:
-    """Score a job against the resume using Groq."""
 
     title = job.get("title", "")
     company = job.get("companyName", "")
-    description = (job.get("descriptionText") or "")[:2000]
+
+    # Reduced token size
+    description = (job.get("descriptionText") or "")[:800]
+
     seniority = job.get("seniorityLevel", "")
 
     prompt = f"""
-You are a career coach scoring job-resume compatibility for a candidate.
+You are a career coach scoring job compatibility.
 
-CANDIDATE RESUME SUMMARY:
+CANDIDATE:
 {RESUME_SUMMARY}
 
-JOB POSTING:
+JOB:
 Title: {title}
 Company: {company}
 Seniority: {seniority}
 
-Description (excerpt):
+Description:
 {description}
 
-Score this job on a scale of 0–100 based on:
+Return ONLY valid JSON.
 
-1. Tech stack overlap (40 pts)
-   - Python
-   - FastAPI
-   - Databricks
-   - PySpark
-   - PostgreSQL
-   - Kafka
-   - Azure
-
-2. Experience level fit (30 pts)
-   - Candidate has 1.5 yrs industry experience
-   - Ideal range: 0–3 yrs
-
-3. Role relevance (20 pts)
-   - Data Engineer
-   - Backend Engineer
-   - Data Platform Engineer
-
-4. Location/remote fit (10 pts)
-   - Pune preferred
-   - Bangalore acceptable
-   - Remote acceptable
-
-Respond ONLY with valid JSON.
-
-Example:
 {{
-  "score": 88,
-  "verdict": "Strong Match",
-  "match_reasons": [
-    "Strong Python + FastAPI overlap",
-    "Experience level aligns well",
-    "Uses Kafka and PostgreSQL"
-  ],
-  "gap": "Limited explicit Kubernetes exposure",
-  "exp_required": "1-3 yrs"
+  "score": 0-100,
+  "verdict": "Strong Match | Moderate Match | Weak Match | Skip",
+  "match_reasons": ["reason1", "reason2"],
+  "gap": "biggest missing skill",
+  "exp_required": "experience range"
 }}
 """
 
@@ -204,6 +267,8 @@ Example:
 
     body = {
         "model": "llama-3.1-8b-instant",
+        "temperature": 0.2,
+        "max_tokens": 250,
         "messages": [
             {
                 "role": "system",
@@ -217,28 +282,20 @@ Example:
                 "content": prompt,
             },
         ],
-        "temperature": 0.2,
-        "max_tokens": 400,
     }
 
     try:
-        r = requests.post(
-            "https://api.groq.com/openai/v1/chat/completions",
-            headers=headers,
-            json=body,
-            timeout=30,
-        )
 
-        r.raise_for_status()
+        r = groq_request(headers, body)
 
         raw = r.json()["choices"][0]["message"]["content"].strip()
 
-        # Remove markdown fences if model adds them
         raw = raw.replace("```json", "").replace("```", "").strip()
 
         scoring = json.loads(raw)
 
     except Exception as e:
+
         print(f"    ⚠ Groq scoring failed for '{title}': {e}")
 
         scoring = {
@@ -252,30 +309,37 @@ Example:
     return {**job, **scoring}
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# SCORE ALL JOBS
+# ──────────────────────────────────────────────────────────────────────────────
+
 def score_all_jobs(jobs: list[dict]) -> list[dict]:
-    """Score all jobs using Groq."""
 
     print(f"🤖 Scoring {len(jobs)} jobs with Groq API...")
 
     scored = []
 
     for i, job in enumerate(jobs):
+
         print(
             f"  [{i+1}/{len(jobs)}] "
-            f"{job.get('title','?')} "
-            f"@ {job.get('companyName','?')}"
+            f"{job.get('title', '?')} "
+            f"@ {job.get('companyName', '?')}"
         )
 
         scored.append(score_job_with_groq(job))
 
-        # Groq is fast, tiny delay is enough
-        time.sleep(0.2)
+        # Small delay
+        time.sleep(1)
 
     return scored
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# FILTER + RANK
+# ──────────────────────────────────────────────────────────────────────────────
+
 def filter_and_rank(scored_jobs: list[dict]) -> list[dict]:
-    """Keep only jobs above threshold."""
 
     filtered = [
         j for j in scored_jobs
@@ -287,31 +351,47 @@ def filter_and_rank(scored_jobs: list[dict]) -> list[dict]:
         reverse=True,
     )
 
+    top_jobs = filtered[:TOP_N]
+
     print(
-        f"✅ {len(filtered)} jobs passed "
-        f"score threshold (≥{MIN_SCORE})"
+        f"✅ Returning top {len(top_jobs)} jobs "
+        f"(score ≥ {MIN_SCORE})"
     )
 
-    return filtered
+    return top_jobs
 
+
+# ──────────────────────────────────────────────────────────────────────────────
+# MAIN
+# ──────────────────────────────────────────────────────────────────────────────
 
 def main():
+
     today = datetime.now(timezone.utc).strftime("%B %d, %Y")
 
-    print(f"\n{'='*55}")
+    print(f"\n{'='*60}")
     print(f"  Job Newsletter Agent — {today}")
-    print(f"{'='*55}\n")
+    print(f"{'='*60}\n")
 
     raw_jobs = scrape_linkedin_jobs()
 
     unique_jobs = deduplicate(raw_jobs)
 
-    scored_jobs = score_all_jobs(unique_jobs)
+    filtered_jobs = prefilter_jobs(unique_jobs)
+
+    # Hard limit before LLM scoring
+    filtered_jobs = filtered_jobs[:10]
+
+    print(f"🚀 Sending only {len(filtered_jobs)} jobs to Groq")
+
+    scored_jobs = score_all_jobs(filtered_jobs)
 
     top_jobs = filter_and_rank(scored_jobs)
 
     if not top_jobs:
-        print("📭 No jobs met the score threshold today.")
+
+        print("📭 No jobs met the threshold today.")
+
         return
 
     send_newsletter(
