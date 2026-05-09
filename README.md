@@ -1,120 +1,414 @@
-# 🎯 Daily Job Newsletter Agent
+# 🎯 AI Job Newsletter Agent
 
-Automatically scrapes LinkedIn for jobs matching your resume every 24 hours,
-scores each one with Claude AI, and sends a ranked HTML digest to your inbox.
+Automatically scrapes LinkedIn for highly relevant jobs, filters and scores them using Groq LLMs, and sends a ranked HTML newsletter directly to your inbox twice a day.
 
----
-
-## How it works
-
-1. **GitHub Actions** triggers the script daily at 8 AM IST (free, no server needed)
-2. **Apify** scrapes LinkedIn for jobs posted in the last 48 hours
-3. **Claude API** scores each job 0–100 against your resume
-4. Jobs scoring ≥ 70 are ranked and formatted into a newsletter
-5. **Resend or SendGrid** sends the HTML email to your inbox
+Designed for backend, Python, data engineering, and platform engineering roles.
 
 ---
 
-## Setup (10 minutes)
+# 🚀 Features
 
-### Step 1 — Fork/create the repo
+- ✅ Scrapes fresh LinkedIn jobs posted in the last **12 hours**
+- ✅ Supports multiple locations:
+  - Pune
+  - Bangalore
+  - Hyderabad
+  - Remote (India)
+- ✅ AI-powered scoring using Groq (`llama-3.1-8b-instant`)
+- ✅ Smart filtering removes:
+  - Senior roles
+  - Java/.NET/PHP/mobile roles
+  - Irrelevant tech stacks
+- ✅ Sends only the **Top N highest-scoring jobs**
+- ✅ Beautiful HTML email newsletter
+- ✅ Fully serverless using GitHub Actions
+- ✅ Runs automatically twice daily
+- ✅ Extremely low-cost / free-tier friendly
 
-Create a new private GitHub repo and add these files:
+---
+
+# 🏗️ Architecture
+
+```text
+GitHub Actions Scheduler
+        │
+        ▼
+LinkedIn Search URLs
+        │
+        ▼
+Apify LinkedIn Scraper
+        │
+        ▼
+Raw Jobs Dataset
+        │
+        ▼
+Deduplication Engine
+        │
+        ▼
+Keyword + Tech Stack Filtering
+        │
+        ▼
+Freshness + Seniority Filtering
+        │
+        ▼
+Top Relevant Jobs
+        │
+        ▼
+Groq LLM Scoring
+        │
+        ▼
+Ranked Jobs (Score ≥ MIN_SCORE)
+        │
+        ▼
+HTML Newsletter Generator
+        │
+        ▼
+Resend / SendGrid Email Delivery
 ```
+
+---
+
+# ⚙️ How It Works
+
+1. GitHub Actions triggers the workflow twice daily
+2. Apify scrapes LinkedIn jobs from configured searches
+3. Jobs are deduplicated and prefiltered locally
+4. Groq LLM scores compatibility against your resume
+5. Top-ranked jobs are selected
+6. A polished HTML newsletter is generated
+7. Resend or SendGrid sends the email
+
+---
+
+# 📂 Project Structure
+
+```text
+.
+├── job_agent.py
+├── email_sender.py
+├── requirements.txt
+└── .github
+    └── workflows
+        └── job_newsletter.yml
+```
+
+---
+
+# 🛠️ Setup (10 Minutes)
+
+## Step 1 — Create GitHub Repository
+
+Create a new private GitHub repository and add:
+
+```text
 job_agent.py
 email_sender.py
 .github/workflows/job_newsletter.yml
+requirements.txt
 ```
 
-### Step 2 — Get your API keys (all have free tiers)
+---
 
-| Service | Free Tier | Sign Up |
-|---------|-----------|---------|
-| **Apify** | 100 actor runs/mo | https://apify.com |
-| **Anthropic** | Pay-per-use (~$0.01/run) | https://console.anthropic.com |
-| **Resend** *(recommended)* | 100 emails/day free | https://resend.com |
-| **SendGrid** *(alternative)* | 100 emails/day free | https://sendgrid.com |
+# 🔑 Step 2 — Get API Keys
 
-For Resend: you need a verified domain or use their sandbox with your own email.
-For SendGrid: verify your sender email address in their dashboard.
+All services used have generous free tiers.
 
-### Step 3 — Add GitHub Secrets
+| Service | Usage | Free Tier |
+|---|---|---|
+| Apify | LinkedIn scraping | 100 runs/month |
+| Groq | LLM scoring | Free developer tier |
+| Resend | Email delivery | 100 emails/day |
+| SendGrid | Alternative email provider | 100 emails/day |
 
-Go to your repo → **Settings → Secrets and variables → Actions → New repository secret**
+## Official Websites
+
+- Apify → https://apify.com
+- Groq Console → https://console.groq.com
+- Resend → https://resend.com
+- SendGrid → https://sendgrid.com
+
+---
+
+# 🔐 Step 3 — Add GitHub Secrets
+
+Go to:
+
+```text
+GitHub Repo
+→ Settings
+→ Secrets and variables
+→ Actions
+→ New repository secret
+```
 
 Add these secrets:
 
-| Secret name | Value |
-|-------------|-------|
+| Secret Name | Description |
+|---|---|
 | `APIFY_TOKEN` | Your Apify API token |
-| `ANTHROPIC_API_KEY` | Your Anthropic API key |
-| `RECIPIENT_EMAIL` | abhishek230102@gmail.com |
-| `SENDER_EMAIL` | your verified sender email |
-| `EMAIL_API_KEY` | Your Resend or SendGrid API key |
+| `GROQ_API_KEY` | Your Groq API key |
+| `RECIPIENT_EMAIL` | Your inbox email |
+| `SENDER_EMAIL` | Verified sender email |
+| `EMAIL_API_KEY` | Resend or SendGrid API key |
 | `EMAIL_PROVIDER` | `resend` or `sendgrid` |
-
-### Step 4 — Customize your searches
-
-In `job_agent.py`, edit `LINKEDIN_SEARCH_URLS` to add/change locations or roles.
-Edit `RESUME_SUMMARY` if your skills change.
-
-### Step 5 — Test it
-
-Go to **Actions** tab in GitHub → **Daily Job Newsletter** → **Run workflow** (manual trigger).
-
-Check your inbox in ~3–5 minutes.
+| `MIN_SCORE` | Recommended: `80` |
+| `TOP_N` | Recommended: `5` |
 
 ---
 
-## Customization
+# 🔎 Step 4 — Customize Job Searches
 
-| What | Where | How |
-|------|-------|-----|
-| Score threshold | `MIN_SCORE` env var or workflow YAML | Default: 70 |
-| Locations/roles | `LINKEDIN_SEARCH_URLS` in `job_agent.py` | Add/remove LinkedIn search URLs |
-| Schedule | `.github/workflows/job_newsletter.yml` | Edit the cron expression |
-| Resume skills | `RESUME_SUMMARY` in `job_agent.py` | Paste your updated skills |
+Edit `LINKEDIN_SEARCH_URLS` in `job_agent.py`.
 
-### Changing the schedule
+Current setup searches:
 
-The default is 8:00 AM IST daily. To change it, edit the cron line in the workflow:
+- Data Engineer
+- Backend Engineer (Python/FastAPI)
+- Associate Data Engineer
+- Remote backend roles
+
+Across:
+- Pune
+- Bangalore
+- Hyderabad
+- Remote India
+
+---
+
+# 🧠 Step 5 — Customize Resume Profile
+
+Update `RESUME_SUMMARY` in `job_agent.py`.
+
+This directly impacts:
+- AI scoring
+- Match quality
+- Ranking accuracy
+
+---
+
+# ⏰ Step 6 — GitHub Actions Schedule
+
+Current schedule:
+- 8:00 AM IST
+- 8:00 PM IST
 
 ```yaml
-# Examples (all times in UTC):
-- cron: "30 2 * * *"    # 8:00 AM IST (default)
-- cron: "30 2 * * 1-5"  # Weekdays only
-- cron: "30 2 * * 1"    # Mondays only
+on:
+  schedule:
+    # 8 AM IST
+    - cron: "30 2 * * *"
+
+    # 8 PM IST
+    - cron: "30 14 * * *"
+```
+
+You can also manually trigger from:
+
+```text
+GitHub → Actions → Run Workflow
 ```
 
 ---
 
-## Estimated monthly cost
+# 📬 Newsletter Output
 
-| Service | Usage | Cost |
-|---------|-------|------|
-| GitHub Actions | ~30 runs × ~5 min | Free (2000 min/mo included) |
-| Apify | ~30 runs × ~50 jobs | Free (100 runs/mo free tier) |
-| Anthropic API | ~30 × 50 jobs × ~300 tokens | ~$0.30–0.50/month |
-| Resend / SendGrid | 30 emails/month | Free |
-| **Total** | | **~$0.50/month** |
+The generated email contains:
+
+- Compatibility score
+- Match verdict
+- Match reasons
+- Missing skill gaps
+- Apply links
+- LinkedIn links
+- Remote badges
+- Experience requirements
+
+Only the **top-ranked jobs** are included.
 
 ---
 
-## Troubleshooting
+# 🧪 Smart Filtering Logic
 
-**No email received?**
-- Check GitHub Actions logs for errors
-- Verify your sender email is confirmed with Resend/SendGrid
+Before sending jobs to the LLM, the system removes:
+
+## ❌ Excluded Roles
+
+- Manager
+- Director
+- Lead
+- Principal
+- Architect
+
+## ❌ Excluded Tech Stacks
+
+- Java
+- Spring Boot
+- .NET
+- PHP
+- Android
+- iOS
+- React Native
+
+## ✅ Preferred Skills
+
+- Python
+- FastAPI
+- Databricks
+- PySpark
+- Kafka
+- PostgreSQL
+- Azure
+- ETL
+- Backend Engineering
+- Data Platform Engineering
+
+---
+
+# 💰 Estimated Monthly Cost
+
+| Service | Estimated Usage | Cost |
+|---|---|---|
+| GitHub Actions | ~60 runs/month | Free |
+| Apify | ~60 runs/month | Free |
+| Groq | ~10 scored jobs/run | Free |
+| Resend / SendGrid | ~60 emails/month | Free |
+| **Total** | | **~$0/month** |
+
+---
+
+# 📈 Performance Strategy
+
+The system intentionally:
+- Scrapes many jobs
+- Filters aggressively
+- Scores only top relevant jobs
+- Sends only highest-quality matches
+
+This minimizes:
+- API costs
+- LLM usage
+- Noise
+- Irrelevant applications
+
+---
+
+# 🛡️ Rate Limit Protection
+
+Built-in protections include:
+
+- Exponential retry backoff
+- Local keyword filtering
+- Hard cap before LLM scoring
+- Token-reduced prompts
+- Deduplication
+
+---
+
+# 🧯 Troubleshooting
+
+## No email received
+
+- Check GitHub Actions logs
+- Verify sender email/domain
 - Check spam folder
 
-**Apify run times out?**
-- Reduce `count` in `scrape_linkedin_jobs()` (default: 50)
-- Reduce number of search URLs
+---
 
-**Claude API errors?**
-- Check your Anthropic account has credits
-- The script will skip failed scorings rather than crash
+## Groq rate limits (429)
+
+Reduce:
+
+```python
+filtered_jobs = filtered_jobs[:10]
+```
+
+to:
+
+```python
+filtered_jobs = filtered_jobs[:5]
+```
 
 ---
 
-Built with: Python · Apify · Claude API · Resend · GitHub Actions
+## Too many irrelevant jobs
+
+Adjust:
+
+```python
+RELEVANT_KEYWORDS
+NEGATIVE_KEYWORDS
+EXCLUDED_KEYWORDS
+```
+
+---
+
+## Apify scraping too many jobs
+
+Reduce:
+
+```python
+"count": 25
+```
+
+to:
+
+```python
+"count": 12
+```
+
+---
+
+# 🎯 Recommended Production Settings
+
+```python
+MIN_SCORE = 80
+TOP_N = 5
+```
+
+And:
+
+```python
+"count": 12
+```
+
+These give the best balance of:
+- freshness
+- quality
+- low cost
+- free-tier sustainability
+
+---
+
+# 🔮 Future Improvements
+
+Potential upgrades:
+
+- Resume-tailored scoring
+- Auto-generated cover letters
+- ATS keyword optimization
+- Telegram/Slack notifications
+- Vector search memory
+- Multi-LLM ensemble scoring
+- Automatic application tracking dashboard
+
+---
+
+# 🧱 Tech Stack
+
+- Python
+- GitHub Actions
+- Groq LLM API
+- Apify
+- Resend / SendGrid
+- LinkedIn Job Search
+- HTML Email Templates
+
+---
+
+# 📄 License
+
+MIT License
+
+---
+
+Built with ❤️ using AI + automation for smarter job hunting.
