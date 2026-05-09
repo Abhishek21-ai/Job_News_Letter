@@ -5,13 +5,17 @@ and sends a ranked HTML digest to your email.
 """
 
 import os
+import re
 import json
 import time
 import requests
+
 from datetime import datetime, timezone
 from email_sender import send_newsletter
 
-# ── Config ────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────────────────
+# CONFIG
+# ──────────────────────────────────────────────────────────────────────────────
 
 APIFY_TOKEN = os.environ["APIFY_TOKEN"]
 GROQ_API_KEY = os.environ["GROQ_API_KEY"]
@@ -22,10 +26,12 @@ SENDER_EMAIL = os.environ["SENDER_EMAIL"]
 EMAIL_API_KEY = os.environ["EMAIL_API_KEY"]
 EMAIL_PROVIDER = os.environ.get("EMAIL_PROVIDER", "resend")
 
-MIN_SCORE = int(os.environ.get("MIN_SCORE", "90"))
+MIN_SCORE = int(os.environ.get("MIN_SCORE", "80"))
 TOP_N = int(os.environ.get("TOP_N", "5"))
 
-# ── Resume Summary ───────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────────────────
+# RESUME SUMMARY
+# ──────────────────────────────────────────────────────────────────────────────
 
 RESUME_SUMMARY = """
 Name: Abhishek Pandey
@@ -45,7 +51,12 @@ Certification: Databricks Certified Data Engineer Professional
 Education: M.Sc. Computer Science
 """
 
-# ── LinkedIn Search URLs ─────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────────────────
+# LINKEDIN SEARCH URLS
+# f_TPR=r43200 = last 12 hours
+# f_E=2 = Entry level
+# f_WT=2 = Remote
+# ──────────────────────────────────────────────────────────────────────────────
 
 LINKEDIN_SEARCH_URLS = [
 
@@ -55,13 +66,11 @@ LINKEDIN_SEARCH_URLS = [
 
     "https://www.linkedin.com/jobs/search/?keywords=Backend%20Engineer%20Python%20FastAPI&location=Pune%2C%20Maharashtra%2C%20India&f_TPR=r43200&f_E=2",
 
-
     # ── BANGALORE ───────────────────────────────────────
 
     "https://www.linkedin.com/jobs/search/?keywords=Data%20Engineer&location=Bengaluru%2C%20Karnataka%2C%20India&f_TPR=r43200&f_E=2",
 
     "https://www.linkedin.com/jobs/search/?keywords=Backend%20Engineer%20Python%20FastAPI&location=Bengaluru%2C%20Karnataka%2C%20India&f_TPR=r43200&f_E=2",
-
 
     # ── HYDERABAD ───────────────────────────────────────
 
@@ -69,16 +78,16 @@ LINKEDIN_SEARCH_URLS = [
 
     "https://www.linkedin.com/jobs/search/?keywords=Backend%20Engineer%20Python%20FastAPI&location=Hyderabad%2C%20Telangana%2C%20India&f_TPR=r43200&f_E=2",
 
-
     # ── REMOTE INDIA ────────────────────────────────────
 
     "https://www.linkedin.com/jobs/search/?keywords=Backend%20Engineer%20Python%20FastAPI&location=India&f_TPR=r43200&f_E=2&f_WT=2",
 
     "https://www.linkedin.com/jobs/search/?keywords=Associate%20Data%20Engineer%20Python&location=India&f_TPR=r43200&f_E=2&f_WT=2",
-
 ]
 
-# ── Smart Local Filtering ────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────────────────
+# FILTERING RULES
+# ──────────────────────────────────────────────────────────────────────────────
 
 RELEVANT_KEYWORDS = [
     "python",
@@ -103,6 +112,17 @@ EXCLUDED_KEYWORDS = [
     "12+ years",
 ]
 
+NEGATIVE_KEYWORDS = [
+    "java",
+    "spring",
+    "springboot",
+    ".net",
+    "dotnet",
+    "php",
+    "android",
+    "ios",
+    "react native",
+]
 
 # ──────────────────────────────────────────────────────────────────────────────
 # SCRAPE JOBS
@@ -160,7 +180,6 @@ def scrape_linkedin_jobs() -> list[dict]:
 
     return jobs
 
-
 # ──────────────────────────────────────────────────────────────────────────────
 # DEDUPLICATE
 # ──────────────────────────────────────────────────────────────────────────────
@@ -172,16 +191,19 @@ def deduplicate(jobs: list[dict]) -> list[dict]:
 
     for job in jobs:
 
-        jid = job.get("id") or job.get("link", "")
+        title = job.get("title", "").strip().lower()
+        company = job.get("companyName", "").strip().lower()
+        location = job.get("location", "").strip().lower()
 
-        if jid and jid not in seen:
-            seen.add(jid)
+        key = f"{title}|{company}|{location}"
+
+        if key not in seen:
+            seen.add(key)
             unique.append(job)
 
     print(f"  After dedup: {len(unique)} jobs")
 
     return unique
-
 
 # ──────────────────────────────────────────────────────────────────────────────
 # PREFILTER
@@ -202,6 +224,10 @@ def prefilter_jobs(jobs: list[dict]) -> list[dict]:
         if not any(k in text for k in RELEVANT_KEYWORDS):
             continue
 
+        # Exclude unwanted tech stacks
+        if any(k in text for k in NEGATIVE_KEYWORDS):
+            continue
+
         # Exclude senior roles
         if any(k in text for k in EXCLUDED_KEYWORDS):
             continue
@@ -211,7 +237,6 @@ def prefilter_jobs(jobs: list[dict]) -> list[dict]:
     print(f"🔍 Prefiltered to {len(filtered)} relevant jobs")
 
     return filtered
-
 
 # ──────────────────────────────────────────────────────────────────────────────
 # GROQ REQUEST WITH RETRY
@@ -228,7 +253,7 @@ def groq_request(headers, body, retries=5):
             timeout=30,
         )
 
-        # Handle rate limits
+        # Rate limit handling
         if r.status_code == 429:
 
             wait = 2 ** attempt
@@ -245,7 +270,6 @@ def groq_request(headers, body, retries=5):
 
     raise Exception("Groq rate limit exceeded after retries")
 
-
 # ──────────────────────────────────────────────────────────────────────────────
 # SCORE JOB
 # ──────────────────────────────────────────────────────────────────────────────
@@ -255,7 +279,6 @@ def score_job_with_groq(job: dict) -> dict:
     title = job.get("title", "")
     company = job.get("companyName", "")
 
-    # Reduced token size
     description = (job.get("descriptionText") or "")[:800]
 
     seniority = job.get("seniorityLevel", "")
@@ -273,6 +296,12 @@ Seniority: {seniority}
 
 Description:
 {description}
+
+Scoring Rules:
+1. Python/FastAPI/Backend/Data Engineering relevance
+2. Entry-level or 0-3 years preferred
+3. Databricks/PySpark/Kafka/Azure are strong positives
+4. Remote/Pune/Bangalore/Hyderabad preferred
 
 Return ONLY valid JSON.
 
@@ -315,9 +344,13 @@ Return ONLY valid JSON.
 
         raw = r.json()["choices"][0]["message"]["content"].strip()
 
-        raw = raw.replace("```json", "").replace("```", "").strip()
+        # Extract ONLY JSON block
+        match = re.search(r"\{.*\}", raw, re.DOTALL)
 
-        scoring = json.loads(raw)
+        if not match:
+            raise ValueError("No JSON found")
+
+        scoring = json.loads(match.group())
 
     except Exception as e:
 
@@ -332,7 +365,6 @@ Return ONLY valid JSON.
         }
 
     return {**job, **scoring}
-
 
 # ──────────────────────────────────────────────────────────────────────────────
 # SCORE ALL JOBS
@@ -354,11 +386,10 @@ def score_all_jobs(jobs: list[dict]) -> list[dict]:
 
         scored.append(score_job_with_groq(job))
 
-        # Small delay
+        # Delay to avoid hitting Groq limits
         time.sleep(1)
 
     return scored
-
 
 # ──────────────────────────────────────────────────────────────────────────────
 # FILTER + RANK
@@ -385,7 +416,6 @@ def filter_and_rank(scored_jobs: list[dict]) -> list[dict]:
 
     return top_jobs
 
-
 # ──────────────────────────────────────────────────────────────────────────────
 # MAIN
 # ──────────────────────────────────────────────────────────────────────────────
@@ -404,7 +434,7 @@ def main():
 
     filtered_jobs = prefilter_jobs(unique_jobs)
 
-    # Hard limit before LLM scoring
+    # Hard limit before Groq scoring
     filtered_jobs = filtered_jobs[:10]
 
     print(f"🚀 Sending only {len(filtered_jobs)} jobs to Groq")
@@ -431,6 +461,7 @@ def main():
 
     print(f"\n🎉 Newsletter sent to {RECIPIENT_EMAIL}")
 
+# ──────────────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     main()
