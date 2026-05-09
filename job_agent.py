@@ -48,9 +48,42 @@ Education: M.Sc. Computer Science
 # ── LinkedIn Search URLs ─────────────────────────────────────────────────────
 
 LINKEDIN_SEARCH_URLS = [
-    "https://www.linkedin.com/jobs/search/?keywords=Data%20Engineer&location=Pune%2C%20Maharashtra%2C%20India&f_TPR=r172800&f_E=2",
-    "https://www.linkedin.com/jobs/search/?keywords=Backend%20Engineer%20Python%20FastAPI&location=Pune%2C%20Maharashtra%2C%20India&f_TPR=r172800&f_E=2",
-    "https://www.linkedin.com/jobs/search/?keywords=Associate%20Data%20Engineer%20Python&location=India&f_TPR=r172800&f_E=2",
+
+    # ── PUNE ─────────────────────────────────────────────
+
+    # Data Engineer — Pune — Last 24 Hours
+    "https://www.linkedin.com/jobs/search/?keywords=Data%20Engineer&location=Pune%2C%20Maharashtra%2C%20India&f_TPR=r86400&f_E=2",
+
+    # Backend Engineer Python FastAPI — Pune — Last 24 Hours
+    "https://www.linkedin.com/jobs/search/?keywords=Backend%20Engineer%20Python%20FastAPI&location=Pune%2C%20Maharashtra%2C%20India&f_TPR=r86400&f_E=2",
+
+
+    # ── BANGALORE ───────────────────────────────────────
+
+    # Data Engineer — Bangalore — Last 24 Hours
+    "https://www.linkedin.com/jobs/search/?keywords=Data%20Engineer&location=Bengaluru%2C%20Karnataka%2C%20India&f_TPR=r86400&f_E=2",
+
+    # Backend Engineer Python — Bangalore — Last 24 Hours
+    "https://www.linkedin.com/jobs/search/?keywords=Backend%20Engineer%20Python%20FastAPI&location=Bengaluru%2C%20Karnataka%2C%20India&f_TPR=r86400&f_E=2",
+
+
+    # ── HYDERABAD ───────────────────────────────────────
+
+    # Data Engineer — Hyderabad — Last 24 Hours
+    "https://www.linkedin.com/jobs/search/?keywords=Data%20Engineer&location=Hyderabad%2C%20Telangana%2C%20India&f_TPR=r86400&f_E=2",
+
+    # Backend Engineer Python — Hyderabad — Last 24 Hours
+    "https://www.linkedin.com/jobs/search/?keywords=Backend%20Engineer%20Python%20FastAPI&location=Hyderabad%2C%20Telangana%2C%20India&f_TPR=r86400&f_E=2",
+
+
+    # ── REMOTE INDIA ────────────────────────────────────
+
+    # Remote Backend Engineer Python
+    "https://www.linkedin.com/jobs/search/?keywords=Backend%20Engineer%20Python%20FastAPI&location=India&f_TPR=r86400&f_E=2&f_WT=2",
+
+    # Remote Associate Data Engineer
+    "https://www.linkedin.com/jobs/search/?keywords=Associate%20Data%20Engineer%20Python&location=India&f_TPR=r86400&f_E=2&f_WT=2",
+
 ]
 
 # ── Smart Local Filtering ────────────────────────────────────────────────────
