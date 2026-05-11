@@ -1,105 +1,145 @@
+# resume_profile.py
+
 import json
-import re
 from pathlib import Path
 
-from resume_parser import ResumeParser
+import fitz
+from groq import Groq
 
 
-OUTPUT_PATH = Path("resume_profile.json")
+# ============================================================
+# CONFIG
+# ============================================================
+
+RESUME_PATH = Path("resumes/latest_resume.pdf")
+
+MODEL_NAME = "llama-3.1-8b-instant"
+
+client = Groq()
 
 
-KNOWN_SKILLS = [
-    "python",
-    "fastapi",
-    "postgresql",
-    "kafka",
-    "pyspark",
-    "databricks",
-    "azure",
-    "docker",
-    "github actions",
-    "linux",
-    "sql",
-    "redis",
-    "spark",
-    "git",
-    "kubernetes",
-    "react",
-    "typescript",
-]
+# ============================================================
+# PDF TEXT EXTRACTION
+# ============================================================
+
+def extract_resume_text(pdf_path: str) -> str:
+    """
+    Extracts text from PDF resume using PyMuPDF.
+    """
+
+    doc = fitz.open(pdf_path)
+
+    pages = []
+
+    for page in doc:
+        pages.append(page.get_text())
+
+    doc.close()
+
+    text = "\n".join(pages)
+
+    # Basic cleanup
+    text = " ".join(text.split())
+
+    return text
 
 
-TARGET_ROLES = [
-    "backend engineer",
-    "backend developer",
-    "software engineer",
-    "data engineer",
-    "platform engineer",
-]
+# ============================================================
+# PROMPT
+# ============================================================
+
+def build_prompt(resume_text: str) -> str:
+    return f"""
+You are an expert resume analyzer.
+
+Analyze the following resume and generate a structured JSON profile.
+
+Return ONLY valid JSON.
+
+Rules:
+- Do NOT add markdown
+- Do NOT add explanation text
+- Do NOT wrap in ```json
+- Infer experience level from timelines if possible
+- Infer engineering domains from projects and technologies
+- Infer leadership signals if present
+
+Required JSON schema:
+
+{{
+  "primary_roles": [],
+  "skills": [],
+  "experience_level": "",
+  "seniority": "",
+  "core_strengths": [],
+  "preferred_domains": [],
+  "leadership_signals": []
+}}
+
+Resume:
+
+{resume_text}
+"""
 
 
-class ResumeProfiler:
-    def __init__(self):
-        parser = ResumeParser()
-        self.resume_text = parser.extract_text().lower()
+# ============================================================
+# LLM PROFILE GENERATION
+# ============================================================
 
-    def extract_skills(self):
-        found = []
+def generate_resume_profile(resume_text: str) -> dict:
+    prompt = build_prompt(resume_text)
 
-        for skill in KNOWN_SKILLS:
-            if skill in self.resume_text:
-                found.append(skill)
-
-        return sorted(list(set(found)))
-
-    def extract_roles(self):
-        found = []
-
-        for role in TARGET_ROLES:
-            if role in self.resume_text:
-                found.append(role)
-
-        return sorted(list(set(found)))
-
-    def extract_experience(self):
-        patterns = [
-            r'(\d+)\+?\s+years',
-            r'(\d+)\+?\s+year'
+    response = client.chat.completions.create(
+        model=MODEL_NAME,
+        temperature=0,
+        response_format={"type": "json_object"},
+        messages=[
+            {
+                "role": "system",
+                "content": (
+                    "You generate highly accurate structured "
+                    "career profile JSON from resumes."
+                )
+            },
+            {
+                "role": "user",
+                "content": prompt
+            }
         ]
+    )
 
-        for pattern in patterns:
-            match = re.search(pattern, self.resume_text)
+    content = response.choices[0].message.content
 
-            if match:
-                return f"{match.group(1)}+ years"
+    return json.loads(content)
 
-        return "Not specified"
 
-    def build_profile(self):
-        profile = {
-            "primary_roles": self.extract_roles(),
-            "skills": self.extract_skills(),
-            "experience_level": self.extract_experience(),
-            "preferred_domains": [
-                "Backend Engineering",
-                "Data Engineering",
-                "Platform Engineering"
-            ]
-        }
+# ============================================================
+# SAVE PROFILE
+# ============================================================
 
-        return profile
+def save_profile(profile: dict):
+    with open("resume_profile.json", "w") as f:
+        json.dump(profile, f, indent=2)
 
-    def save_profile(self):
-        profile = self.build_profile()
 
-        with open(OUTPUT_PATH, "w") as f:
-            json.dump(profile, f, indent=2)
+# ============================================================
+# MAIN
+# ============================================================
 
-        return profile
+def main():
+    print("Extracting resume text...")
+
+    resume_text = extract_resume_text(str(RESUME_PATH))
+
+    print("Generating structured profile with Groq...")
+
+    profile = generate_resume_profile(resume_text)
+
+    save_profile(profile)
+
+    print("\nGenerated Resume Profile:\n")
+    print(json.dumps(profile, indent=2))
 
 
 if __name__ == "__main__":
-    profiler = ResumeProfiler()
-    profile = profiler.save_profile()
-
-    print(json.dumps(profile, indent=2))
+    main()
