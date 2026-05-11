@@ -1,0 +1,6 @@
+# ── Core ──────────────────────────────────────────────────────
+requests
+
+# ── Phase 2: Semantic Embedding Pipeline ──────────────────────
+sentence-transformers   # all-MiniLM-L6-v2, local, zero API cost
+numpy                   # cosine similarity computation
