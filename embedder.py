@@ -13,10 +13,29 @@ from __future__ import annotations
 
 import numpy as np
 from sentence_transformers import SentenceTransformer
+import json
+from pathlib import Path
 
 # Loaded once per process — GitHub Actions caches the model between runs
 # via the actions/cache step (see README for cache config)
 _MODEL: SentenceTransformer | None = None
+
+PROFILE_PATH = Path("resume_profile.json")
+
+
+def build_resume_embedding_text() -> str:
+    with open(PROFILE_PATH) as f:
+        profile = json.load(f)
+
+    text = []
+
+    text.extend(profile.get("primary_roles", []))
+    text.extend(profile.get("skills", []))
+    text.extend(profile.get("preferred_domains", []))
+
+    text.append(profile.get("experience_level", ""))
+
+    return " ".join(text)
 
 
 def _get_model() -> SentenceTransformer:
