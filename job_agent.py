@@ -19,6 +19,10 @@ import requests
 from datetime import datetime, timezone
 from email_sender import send_newsletter
 from embedder import build_resume_embedding, rank_jobs_by_similarity
+from embedder import build_resume_embedding_text
+
+
+RESUME_SUMMARY = build_resume_embedding_text()
 
 # ──────────────────────────────────────────────────────────────────────────────
 # CONFIG
@@ -45,32 +49,32 @@ EMBEDDING_TOP_N = int(os.environ.get("EMBEDDING_TOP_N", "10"))
 # RESUME SUMMARY
 # ──────────────────────────────────────────────────────────────────────────────
 
-RESUME_SUMMARY = """
-Name: Abhishek Pandey
-Experience: 1.5 years industry experience
-Current Role: Software Development Engineer at Modak Analytics (Client: Humana)
+# RESUME_SUMMARY = """
+# Name: Abhishek Pandey
+# Experience: 1.5 years industry experience
+# Current Role: Software Development Engineer at Modak Analytics (Client: Humana)
 
-Core Skills:
-- Python (production), FastAPI, REST APIs, Microservices
-- Azure Databricks, PySpark, Delta Lake
-- Azure Data Factory (ADF), ADLS Gen2
-- PostgreSQL, Kafka
-- Redis, Celery
-- GitHub Actions, CI/CD
-- PyTest, Splunk
+# Core Skills:
+# - Python (production), FastAPI, REST APIs, Microservices
+# - Azure Databricks, PySpark, Delta Lake
+# - Azure Data Factory (ADF), ADLS Gen2
+# - PostgreSQL, Kafka
+# - Redis, Celery
+# - GitHub Actions, CI/CD
+# - PyTest, Splunk
 
-Certification: Databricks Certified Data Engineer Professional
-Education: M.Sc. Computer Science
+# Certification: Databricks Certified Data Engineer Professional
+# Education: M.Sc. Computer Science
 
-Target Roles:
-- Backend Engineer (Python/FastAPI)
-- Data Engineer
-- Platform Engineer
-- Associate Data Engineer
+# Target Roles:
+# - Backend Engineer (Python/FastAPI)
+# - Data Engineer
+# - Platform Engineer
+# - Associate Data Engineer
 
-Preferred: Entry-level to 2 years experience required.
-Locations: Pune, Bangalore, Hyderabad, Remote India.
-"""
+# Preferred: Entry-level to 2 years experience required.
+# Locations: Pune, Bangalore, Hyderabad, Remote India.
+# """
 
 # ──────────────────────────────────────────────────────────────────────────────
 # LINKEDIN SEARCH URLS
