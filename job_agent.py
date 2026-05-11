@@ -1,7 +1,13 @@
 """
-Job Newsletter Agent
-Scrapes LinkedIn jobs via Apify, filters + scores them with Groq,
-and sends a ranked HTML digest to your email.
+Job Newsletter Agent — Phase 2
+Scrapes LinkedIn jobs via Apify, semantically ranks them with local embeddings,
+scores top matches with Groq, and sends a ranked HTML digest to your email.
+
+Phase 2 changes vs Phase 1:
+  - Embedding-based semantic ranking replaces hard [:10] cap
+  - Resume summary used to generate embedding (not just pasted into prompt)
+  - Groq LLM now only scores top N semantically similar jobs
+  - embedder.py handles all vector logic (zero API cost)
 """
 
 import os
@@ -12,6 +18,7 @@ import requests
 
 from datetime import datetime, timezone
 from email_sender import send_newsletter
+from embedder import build_resume_embedding, rank_jobs_by_similarity
 
 # ──────────────────────────────────────────────────────────────────────────────
 # CONFIG
@@ -21,13 +28,18 @@ APIFY_TOKEN = os.environ["APIFY_TOKEN"]
 GROQ_API_KEY = os.environ["GROQ_API_KEY"]
 
 RECIPIENT_EMAIL = os.environ["RECIPIENT_EMAIL"]
-SENDER_EMAIL = os.environ["SENDER_EMAIL"]
+SENDER_EMAIL    = os.environ["SENDER_EMAIL"]
 
-EMAIL_API_KEY = os.environ["EMAIL_API_KEY"]
+EMAIL_API_KEY  = os.environ["EMAIL_API_KEY"]
 EMAIL_PROVIDER = os.environ.get("EMAIL_PROVIDER", "resend")
 
 MIN_SCORE = int(os.environ.get("MIN_SCORE", "80"))
-TOP_N = int(os.environ.get("TOP_N", "5"))
+TOP_N     = int(os.environ.get("TOP_N", "5"))
+
+# How many jobs pass through embeddings → Groq.
+# Embedding is cheap (local), Groq is the rate-limit bottleneck.
+# 10 is a safe ceiling — keeps Groq usage minimal.
+EMBEDDING_TOP_N = int(os.environ.get("EMBEDDING_TOP_N", "10"))
 
 # ──────────────────────────────────────────────────────────────────────────────
 # RESUME SUMMARY
@@ -49,13 +61,22 @@ Core Skills:
 
 Certification: Databricks Certified Data Engineer Professional
 Education: M.Sc. Computer Science
+
+Target Roles:
+- Backend Engineer (Python/FastAPI)
+- Data Engineer
+- Platform Engineer
+- Associate Data Engineer
+
+Preferred: Entry-level to 2 years experience required.
+Locations: Pune, Bangalore, Hyderabad, Remote India.
 """
 
 # ──────────────────────────────────────────────────────────────────────────────
 # LINKEDIN SEARCH URLS
 # f_TPR=r43200 = last 12 hours
-# f_E=2 = Entry level
-# f_WT=2 = Remote
+# f_E=2        = Entry level
+# f_WT=2       = Remote
 # ──────────────────────────────────────────────────────────────────────────────
 
 LINKEDIN_SEARCH_URLS = [
@@ -186,13 +207,13 @@ def scrape_linkedin_jobs() -> list[dict]:
 
 def deduplicate(jobs: list[dict]) -> list[dict]:
 
-    seen = set()
+    seen   = set()
     unique = []
 
     for job in jobs:
 
-        title = job.get("title", "").strip().lower()
-        company = job.get("companyName", "").strip().lower()
+        title    = job.get("title", "").strip().lower()
+        company  = job.get("companyName", "").strip().lower()
         location = job.get("location", "").strip().lower()
 
         key = f"{title}|{company}|{location}"
@@ -206,7 +227,7 @@ def deduplicate(jobs: list[dict]) -> list[dict]:
     return unique
 
 # ──────────────────────────────────────────────────────────────────────────────
-# PREFILTER
+# PREFILTER  (unchanged — still runs before embeddings to reduce noise)
 # ──────────────────────────────────────────────────────────────────────────────
 
 def prefilter_jobs(jobs: list[dict]) -> list[dict]:
@@ -220,7 +241,7 @@ def prefilter_jobs(jobs: list[dict]) -> list[dict]:
             f"{job.get('descriptionText', '')}"
         ).lower()
 
-        # Must contain relevant keywords
+        # Must contain at least one relevant keyword
         if not any(k in text for k in RELEVANT_KEYWORDS):
             continue
 
@@ -228,7 +249,7 @@ def prefilter_jobs(jobs: list[dict]) -> list[dict]:
         if any(k in text for k in NEGATIVE_KEYWORDS):
             continue
 
-        # Exclude senior roles
+        # Exclude senior / leadership roles
         if any(k in text for k in EXCLUDED_KEYWORDS):
             continue
 
@@ -253,35 +274,28 @@ def groq_request(headers, body, retries=5):
             timeout=30,
         )
 
-        # Rate limit handling
         if r.status_code == 429:
-
             wait = 2 ** attempt
-
             print(f"    ⏳ Rate limited. Waiting {wait}s...")
-
             time.sleep(wait)
-
             continue
 
         r.raise_for_status()
-
         return r
 
     raise Exception("Groq rate limit exceeded after retries")
 
 # ──────────────────────────────────────────────────────────────────────────────
-# SCORE JOB
+# SCORE JOB WITH GROQ
 # ──────────────────────────────────────────────────────────────────────────────
 
 def score_job_with_groq(job: dict) -> dict:
 
-    title = job.get("title", "")
-    company = job.get("companyName", "")
-
+    title       = job.get("title", "")
+    company     = job.get("companyName", "")
     description = (job.get("descriptionText") or "")[:800]
-
-    seniority = job.get("seniorityLevel", "")
+    seniority   = job.get("seniorityLevel", "")
+    sim_score   = job.get("similarity_score", "N/A")
 
     prompt = f"""
 You are a career coach scoring job compatibility.
@@ -293,6 +307,7 @@ JOB:
 Title: {title}
 Company: {company}
 Seniority: {seniority}
+Semantic Similarity (pre-computed): {sim_score}
 
 Description:
 {description}
@@ -326,10 +341,7 @@ Return ONLY valid JSON.
         "messages": [
             {
                 "role": "system",
-                "content": (
-                    "You are a strict JSON generator. "
-                    "Return ONLY valid JSON."
-                ),
+                "content": "You are a strict JSON generator. Return ONLY valid JSON.",
             },
             {
                 "role": "user",
@@ -340,15 +352,12 @@ Return ONLY valid JSON.
 
     try:
 
-        r = groq_request(headers, body)
-
-        raw = r.json()["choices"][0]["message"]["content"].strip()
-
-        # Extract ONLY JSON block
-        match = re.search(r"\{.*\}", raw, re.DOTALL)
+        r      = groq_request(headers, body)
+        raw    = r.json()["choices"][0]["message"]["content"].strip()
+        match  = re.search(r"\{.*\}", raw, re.DOTALL)
 
         if not match:
-            raise ValueError("No JSON found")
+            raise ValueError("No JSON found in Groq response")
 
         scoring = json.loads(match.group())
 
@@ -378,15 +387,15 @@ def score_all_jobs(jobs: list[dict]) -> list[dict]:
 
     for i, job in enumerate(jobs):
 
+        sim = job.get("similarity_score", "?")
+
         print(
             f"  [{i+1}/{len(jobs)}] "
-            f"{job.get('title', '?')} "
-            f"@ {job.get('companyName', '?')}"
+            f"{job.get('title', '?')} @ {job.get('companyName', '?')} "
+            f"(similarity: {sim})"
         )
 
         scored.append(score_job_with_groq(job))
-
-        # Delay to avoid hitting Groq limits
         time.sleep(1)
 
     return scored
@@ -397,22 +406,13 @@ def score_all_jobs(jobs: list[dict]) -> list[dict]:
 
 def filter_and_rank(scored_jobs: list[dict]) -> list[dict]:
 
-    filtered = [
-        j for j in scored_jobs
-        if j.get("score", 0) >= MIN_SCORE
-    ]
+    filtered = [j for j in scored_jobs if j.get("score", 0) >= MIN_SCORE]
 
-    filtered.sort(
-        key=lambda x: x.get("score", 0),
-        reverse=True,
-    )
+    filtered.sort(key=lambda x: x.get("score", 0), reverse=True)
 
     top_jobs = filtered[:TOP_N]
 
-    print(
-        f"✅ Returning top {len(top_jobs)} jobs "
-        f"(score ≥ {MIN_SCORE})"
-    )
+    print(f"✅ Returning top {len(top_jobs)} jobs (score ≥ {MIN_SCORE})")
 
     return top_jobs
 
@@ -425,30 +425,46 @@ def main():
     today = datetime.now(timezone.utc).strftime("%B %d, %Y")
 
     print(f"\n{'='*60}")
-    print(f"  Job Newsletter Agent — {today}")
+    print(f"  Job Newsletter Agent — Phase 2 — {today}")
     print(f"{'='*60}\n")
 
+    # ── Step 1: Scrape ────────────────────────────────────────
     raw_jobs = scrape_linkedin_jobs()
 
+    # ── Step 2: Deduplicate ───────────────────────────────────
     unique_jobs = deduplicate(raw_jobs)
 
+    # ── Step 3: Keyword prefilter ─────────────────────────────
     filtered_jobs = prefilter_jobs(unique_jobs)
 
-    # Hard limit before Groq scoring
-    filtered_jobs = filtered_jobs[:10]
+    if not filtered_jobs:
+        print("📭 No jobs passed prefilter today.")
+        return
 
-    print(f"🚀 Sending only {len(filtered_jobs)} jobs to Groq")
+    # ── Step 4: Resume embedding (local, free) ────────────────
+    resume_embedding = build_resume_embedding(RESUME_SUMMARY)
 
-    scored_jobs = score_all_jobs(filtered_jobs)
+    # ── Step 5: Semantic similarity ranking ───────────────────
+    # All filtered jobs get embedded; top EMBEDDING_TOP_N are selected.
+    # This replaces the old hard [:10] cap with intelligent selection.
+    top_similar_jobs = rank_jobs_by_similarity(
+        resume_embedding,
+        filtered_jobs,
+        top_n=EMBEDDING_TOP_N,
+    )
 
+    # ── Step 6: Groq LLM scoring (only on top similar jobs) ───
+    print(f"🚀 Sending {len(top_similar_jobs)} semantically ranked jobs to Groq")
+    scored_jobs = score_all_jobs(top_similar_jobs)
+
+    # ── Step 7: Final ranking by Groq score ───────────────────
     top_jobs = filter_and_rank(scored_jobs)
 
     if not top_jobs:
-
-        print("📭 No jobs met the threshold today.")
-
+        print("📭 No jobs met the score threshold today.")
         return
 
+    # ── Step 8: Send newsletter ───────────────────────────────
     send_newsletter(
         jobs=top_jobs,
         recipient=RECIPIENT_EMAIL,
