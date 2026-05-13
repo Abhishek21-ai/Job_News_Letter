@@ -9,7 +9,10 @@ on:
 
   # Manual trigger — useful for testing or forcing a profile regeneration
   workflow_dispatch:
-
+  
+permissions:
+  contents: write
+  
 jobs:
   run-agent:
     runs-on: ubuntu-latest
