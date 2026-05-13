@@ -2,13 +2,15 @@ name: Job Newsletter Agent
 
 on:
   schedule:
-    # 8 AM IST (2:30 UTC)
-    - cron: "30 2 * * *"
+    # 6:30 AM IST
+    - cron: "0 1 * * *"
 
-    # 8 PM IST (14:30 UTC)
-    - cron: "30 14 * * *"
+    # 2:30 PM IST
+    - cron: "0 9 * * *"
 
-  # Manual trigger for testing/debugging
+    # 10:30 PM IST
+    - cron: "0 17 * * *"
+
   workflow_dispatch:
 
 permissions:
