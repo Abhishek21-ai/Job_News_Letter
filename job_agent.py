@@ -219,6 +219,13 @@ TARGET_TITLE_KEYWORDS = [
     "associate data engineer",
     "platform engineer",
     "software engineer",
+    "backend",
+    "python",
+    "data engineer",
+    "software engineer",
+    "platform engineer",
+    "api",
+    "distributed systems",
 ]
 
 # ──────────────────────────────────────────────────────────────────────────────
