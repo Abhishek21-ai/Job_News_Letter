@@ -96,9 +96,34 @@ LINKEDIN_SEARCH_URLS = [
 # FILTER RULES
 # ──────────────────────────────────────────────────────────────────────────────
 
+# Require at least one of these in the JD body
 RELEVANT_KEYWORDS = [
-    "python", "fastapi", "backend", "data engineer",
-    "databricks", "pyspark", "kafka", "postgresql", "etl", "azure",
+    "python",
+    "fastapi",
+    "data engineer",      # exact phrase — won't match "data scientist"
+    "data pipeline",
+    "databricks",
+    "pyspark",
+    "kafka",
+    "etl",
+    "azure data",
+    "backend engineer",
+    "platform engineer",
+]
+
+# Block these in the title specifically (not description)
+NEGATIVE_TITLE_KEYWORDS = [
+    "data scientist",
+    "data science",
+    "data analyst",
+    "data coach",
+    "machine learning",
+    "ml engineer",
+    "network engineer",
+    "visualization",
+    "devops",
+    "site reliability",   # SRE is adjacent but not your target
+    "security engineer",
 ]
 
 # Title-level seniority words — these override LinkedIn's unreliable field.
@@ -109,10 +134,7 @@ SENIOR_TITLE_KEYWORDS = [
     "10+ years", "12+ years", "8+ years",
 ]
 
-NEGATIVE_STACK_KEYWORDS = [
-    "java", "spring", "springboot", ".net", "dotnet",
-    "php", "android", "ios", "react native", "golang", "ruby on rails",
-]
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # SCRAPE
@@ -183,15 +205,19 @@ def prefilter_jobs(jobs: list[dict]) -> list[dict]:
         desc  = (job.get("descriptionText") or "").lower()
         full  = f"{title} {desc}"
 
-        # Title-level seniority check — stricter, uses title only
+        # Title-based seniority exclusion (existing)
         if any(k in title for k in SENIOR_TITLE_KEYWORDS):
             continue
 
-        # Stack exclusion — uses full text
+        # Title-based role exclusion — blocks adjacent roles by name
+        if any(k in title for k in NEGATIVE_TITLE_KEYWORDS):
+            continue
+
+        # Stack exclusion on full text (existing)
         if any(k in full for k in NEGATIVE_STACK_KEYWORDS):
             continue
 
-        # Must have at least one relevant signal
+        # Must have at least one strong relevance signal
         if not any(k in full for k in RELEVANT_KEYWORDS):
             continue
 
@@ -199,7 +225,6 @@ def prefilter_jobs(jobs: list[dict]) -> list[dict]:
 
     print(f"🔍 Prefiltered to {len(filtered)} relevant jobs")
     return filtered
-
 # ──────────────────────────────────────────────────────────────────────────────
 # GROQ HELPER
 # ──────────────────────────────────────────────────────────────────────────────
@@ -325,7 +350,10 @@ def score_all_jobs(jobs: list[dict], candidate_context: str) -> list[dict]:
             f"{job.get('companyName','?')} (sim: {job.get('similarity_score','?')})"
         )
         scored.append(score_job(job, candidate_context))
-        time.sleep(1)
+        # 7s between calls keeps TPM well under the 6k/min free tier cap
+        # (each scorer call ≈ 600 tokens → 7s gap → ~5,100 TPM max)
+        if i < len(jobs) - 1:
+            time.sleep(7)
     return scored
 
 # ──────────────────────────────────────────────────────────────────────────────
