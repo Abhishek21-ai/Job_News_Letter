@@ -1,8 +1,16 @@
 # 🎯 AI Job Newsletter Agent — Phase 2.1
 
-An AI-powered personal career intelligence system that scrapes LinkedIn jobs, semantically ranks them against your resume, scores them with an LLM, and delivers a ranked HTML digest to your inbox — complete with ATS diagnosis, recruiter analysis, and a tailored resume rewrite per job.
+<div align="center">
 
-Designed for backend, Python, data engineering, and platform engineering roles.
+![Python](https://img.shields.io/badge/Python-3.11-blue?style=for-the-badge&logo=python)
+![Groq](https://img.shields.io/badge/LLM-Groq-black?style=for-the-badge)
+![GitHub Actions](https://img.shields.io/badge/Automation-GitHub_Actions-2088FF?style=for-the-badge&logo=github-actions)
+![LinkedIn](https://img.shields.io/badge/Data_Source-LinkedIn-0A66C2?style=for-the-badge&logo=linkedin)
+![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
+
+### AI-powered career intelligence system for automated job discovery, semantic ranking, ATS analysis, recruiter evaluation, and resume optimization.
+
+</div>
 
 ---
 
@@ -25,56 +33,79 @@ Designed for backend, Python, data engineering, and platform engineering roles.
 
 ---
 
-## 🏗️ Architecture
+# 🏗️ System Architecture
 
-```text
-GitHub Actions Scheduler
-        │
-        ▼
-Resume Profile Check
-(skip if cached, regenerate if REGENERATE_RESUME=true)
-        │
-        ▼
-LinkedIn Search URLs
-        │
-        ▼
-Apify LinkedIn Scraper
-        │
-        ▼
-Raw Jobs Dataset
-        │
-        ▼
-Deduplication Engine
-        │
-        ▼
-Keyword + Tech Stack Filtering
-(title-based seniority check — stricter than description-level)
-        │
-        ▼
-Local Embedding Generation
-(all-MiniLM-L6-v2 · query expansion from resume_profile.json)
-        │
-        ▼
-Cosine Similarity Ranking → Top 10 Jobs
-        │
-        ▼
-Groq LLM Scoring (top 10 only)
-        │
-        ▼
-Score Filter (≥ MIN_SCORE)
-        │
-        ▼
-Intelligence Layer (per qualifying job)
-  ├── 🔬 Diagnoser (ATS analysis)
-  ├── 👔 Recruiter (gap analysis)
-  └── ✍️  Rewriter (XYZ resume rewrite)
-        │
-        ▼
-HTML Newsletter Generator
-        │
-        ▼
-Resend / SendGrid Email Delivery
+<div align="center">
+
+```mermaid
+flowchart TD
+
+    %% ===================== STYLES =====================
+    classDef scheduler fill:#0f172a,color:#ffffff,stroke:#38bdf8,stroke-width:3px;
+    classDef resume fill:#111827,color:#ffffff,stroke:#818cf8,stroke-width:3px;
+    classDef scraping fill:#052e16,color:#ffffff,stroke:#4ade80,stroke-width:3px;
+    classDef filtering fill:#3f2b05,color:#ffffff,stroke:#facc15,stroke-width:3px;
+    classDef embedding fill:#312e81,color:#ffffff,stroke:#a78bfa,stroke-width:3px;
+    classDef llm fill:#4a044e,color:#ffffff,stroke:#f472b6,stroke-width:3px;
+    classDef intelligence fill:#082f49,color:#ffffff,stroke:#22d3ee,stroke-width:3px;
+    classDef delivery fill:#052e16,color:#ffffff,stroke:#34d399,stroke-width:3px;
+
+    %% ===================== FLOW =====================
+
+    A["⚡ GitHub Actions Scheduler<br/><br/>Runs at 8 AM & 8 PM IST"]:::scheduler
+
+    B["📄 Resume Intelligence Layer<br/><br/>
+    • resume_parser.py<br/>
+    • resume_profile.py<br/>
+    • Cached resume_profile.json<br/>
+    • Conditional regeneration"]:::resume
+
+    C["🔎 Job Collection Layer<br/><br/>
+    • LinkedIn Search URLs<br/>
+    • Apify LinkedIn Scraper<br/>
+    • Raw Job Dataset"]:::scraping
+
+    D["🧹 Filtering & Cleanup Layer<br/><br/>
+    • Deduplication<br/>
+    • Seniority Filtering<br/>
+    • Tech Stack Exclusions<br/>
+    • Relevance Keyword Filtering"]:::filtering
+
+    E["🧠 Semantic Ranking Engine<br/><br/>
+    • all-MiniLM-L6-v2<br/>
+    • Query Expansion<br/>
+    • 384-dim Embeddings<br/>
+    • Cosine Similarity Ranking<br/>
+    • Top 10 Jobs"]:::embedding
+
+    F["🤖 Groq LLM Intelligence<br/><br/>
+    • Compatibility Scoring<br/>
+    • Match Verdicts<br/>
+    • Skill Gap Detection<br/>
+    • Experience Alignment"]:::llm
+
+    G["🎯 Three-Actor Intelligence Layer<br/><br/>
+    🔬 Diagnoser → ATS Analysis<br/><br/>
+    👔 Recruiter → Hiring Evaluation<br/><br/>
+    ✍️ Rewriter → Tailored Resume Optimization"]:::intelligence
+
+    H["📬 Newsletter Delivery Layer<br/><br/>
+    • HTML Email Builder<br/>
+    • Resend / SendGrid<br/>
+    • Inbox Delivery"]:::delivery
+
+    %% ===================== CONNECTIONS =====================
+
+    A --> B
+    B --> C
+    C --> D
+    D --> E
+    E --> F
+    F --> G
+    G --> H
 ```
+
+</div>
 
 ---
 
@@ -82,15 +113,15 @@ Resend / SendGrid Email Delivery
 
 ```text
 .
-├── job_agent.py              # Main pipeline
-├── email_sender.py           # HTML newsletter builder + email delivery
-├── embedder.py               # Local semantic similarity engine
+├── job_agent.py              # Main orchestration pipeline
+├── email_sender.py           # HTML newsletter builder + delivery
+├── embedder.py               # Semantic similarity engine
 ├── resume_parser.py          # PDF text extraction utility
-├── resume_profile.py         # Resume → structured JSON profile (Groq)
-├── resume_profile.json       # Cached profile (committed to repo)
+├── resume_profile.py         # Resume → structured profile generator
+├── resume_profile.json       # Cached AI-generated profile
 ├── requirements.txt
 ├── resumes/
-│   └── latest_resume.pdf     # Upload your latest resume here
+│   └── latest_resume.pdf
 └── .github/
     └── workflows/
         └── job_newsletter.yml
@@ -98,31 +129,104 @@ Resend / SendGrid Email Delivery
 
 ---
 
-## ⚙️ How It Works
+# ⚙️ How It Works
 
-1. GitHub Actions triggers the workflow twice daily
-2. `resume_profile.py` checks if regeneration is needed — skips if cached
-3. Apify scrapes LinkedIn jobs from configured search URLs
-4. Jobs are deduplicated and prefiltered locally (title-based seniority check)
-5. `embedder.py` generates a query-expanded resume embedding and ranks all filtered jobs by cosine similarity
-6. Top 10 semantically similar jobs are sent to Groq for scoring
-7. Jobs meeting `MIN_SCORE` go through the three-actor intelligence layer
-8. A polished HTML newsletter is built with all intelligence sections inline
-9. Resend or SendGrid delivers the email
+## 1️⃣ Resume Intelligence Generation
+
+- Resume PDF is parsed locally
+- Structured candidate profile generated using Groq
+- Profile cached as `resume_profile.json`
+- Regenerated only when needed
 
 ---
 
-## 🛠️ Setup
+## 2️⃣ LinkedIn Job Collection
 
-### Step 1 — Create GitHub Repository
-
-Create a new **private** GitHub repository and add all project files.
+- LinkedIn search URLs are queried through Apify
+- Fresh jobs from the last 12 hours are collected
+- Multiple cities + remote jobs supported
 
 ---
 
-### Step 2 — Upload Your Resume
+## 3️⃣ Filtering Pipeline
 
-Commit your latest resume PDF to:
+The pipeline removes:
+
+- Senior roles
+- Irrelevant tech stacks
+- Duplicate jobs
+- Non-target domains
+
+This significantly reduces unnecessary LLM calls.
+
+---
+
+## 4️⃣ Semantic Ranking
+
+`all-MiniLM-L6-v2` creates embeddings for:
+
+- Resume profile
+- Every filtered job description
+
+Jobs are ranked using cosine similarity.
+
+Only the **Top 10 jobs** proceed to LLM scoring.
+
+---
+
+## 5️⃣ AI Intelligence Layer
+
+Each shortlisted job receives:
+
+### 🔬 Diagnoser
+
+- ATS compatibility score
+- Missing keywords
+- Weak/strong resume areas
+
+### 👔 Recruiter
+
+- Hiring-fit analysis
+- Missing industry expectations
+- Quick-win recommendations
+
+### ✍️ Rewriter
+
+- Tailored experience rewrite
+- Google XYZ formula optimization
+- ATS keyword incorporation
+
+---
+
+## 6️⃣ Newsletter Generation
+
+A polished HTML email newsletter is generated containing:
+
+- Job cards
+- Compatibility scores
+- Skill gaps
+- ATS insights
+- Tailored resume sections
+- Apply buttons
+
+Delivered using:
+
+- Resend
+- SendGrid
+
+---
+
+# 🛠️ Setup
+
+## Step 1 — Create Repository
+
+Create a new **private GitHub repository** and upload the project files.
+
+---
+
+## Step 2 — Upload Resume
+
+Place your resume here:
 
 ```text
 resumes/latest_resume.pdf
@@ -130,233 +234,207 @@ resumes/latest_resume.pdf
 
 ---
 
-### Step 3 — Get API Keys
-
-All services used have generous free tiers.
+## Step 3 — Get API Keys
 
 | Service | Usage | Free Tier |
 |---|---|---|
 | Apify | LinkedIn scraping | 100 runs/month |
-| Groq | LLM scoring + intelligence layer | Free developer tier |
+| Groq | LLM scoring | Free |
 | Resend | Email delivery | 100 emails/day |
-| SendGrid | Alternative email provider | 100 emails/day |
-
-- Apify → https://apify.com
-- Groq Console → https://console.groq.com
-- Resend → https://resend.com
-- SendGrid → https://sendgrid.com
+| SendGrid | Alternative email delivery | 100 emails/day |
 
 ---
 
-### Step 4 — Add GitHub Secrets
+## Step 4 — Configure GitHub Secrets
 
-Go to: `GitHub Repo → Settings → Secrets and variables → Actions → New repository secret`
-
-| Secret | Description | Example |
-|---|---|---|
-| `APIFY_TOKEN` | Apify API token | `apify_api_...` |
-| `GROQ_API_KEY` | Groq API key | `gsk_...` |
-| `RECIPIENT_EMAIL` | Your inbox | `you@gmail.com` |
-| `SENDER_EMAIL` | Verified sender email | `agent@yourdomain.com` |
-| `EMAIL_API_KEY` | Resend or SendGrid key | `re_...` |
-| `EMAIL_PROVIDER` | Provider name | `resend` or `sendgrid` |
-| `MIN_SCORE` | Minimum score threshold | `75` |
-| `TOP_N` | Max jobs in newsletter | `5` |
-| `REGENERATE_RESUME` | Controls profile regeneration | `false` |
-| `CANDIDATE_EXPERIENCE` | Your actual experience (overrides LLM inference) | `1.5 years` |
-| `CANDIDATE_SENIORITY` | Your seniority level (overrides LLM inference) | `junior` |
-
-> **Why `CANDIDATE_EXPERIENCE` and `CANDIDATE_SENIORITY` as secrets?**
-> The LLM infers experience from resume timelines — but freelance and consulting work inflates the count. Storing these as secrets gives you direct control and prevents the scorer and intelligence layer from making incorrect assumptions about your level.
-
----
-
-### Step 5 — Generate Resume Profile (First Time Only)
-
-Set `REGENERATE_RESUME` to `true`, trigger the workflow once manually, then set it back to `false`.
+Go to:
 
 ```text
-GitHub → Actions → Run Workflow
+GitHub Repo → Settings → Secrets and variables → Actions
 ```
 
-This generates `resume_profile.json` and commits it back to the repo. All future runs skip this step.
+Add:
 
-**To update after uploading a new resume:**
-1. Commit the new PDF to `resumes/latest_resume.pdf`
-2. Set `REGENERATE_RESUME` secret to `true`
-3. Trigger the workflow once
-4. Set `REGENERATE_RESUME` back to `false`
-
----
-
-### Step 6 — Customize Job Searches
-
-Edit `LINKEDIN_SEARCH_URLS` in `job_agent.py`. Current setup searches:
-
-- Data Engineer
-- Backend Engineer (Python / FastAPI)
-- Associate Data Engineer
-- Remote backend roles
-
-Across: Pune · Bangalore · Hyderabad · Remote India
+| Secret | Description |
+|---|---|
+| `APIFY_TOKEN` | Apify API token |
+| `GROQ_API_KEY` | Groq API key |
+| `RECIPIENT_EMAIL` | Your inbox |
+| `SENDER_EMAIL` | Verified sender |
+| `EMAIL_API_KEY` | Resend/SendGrid API key |
+| `EMAIL_PROVIDER` | resend / sendgrid |
+| `MIN_SCORE` | Minimum compatibility threshold |
+| `TOP_N` | Max jobs in newsletter |
+| `REGENERATE_RESUME` | true / false |
+| `CANDIDATE_EXPERIENCE` | Actual experience |
+| `CANDIDATE_SENIORITY` | junior / mid |
 
 ---
 
-## ⏰ Schedule
+# ⏰ Schedule
 
-Runs automatically at:
-- **8:00 AM IST** (2:30 UTC)
-- **8:00 PM IST** (14:30 UTC)
+Runs automatically:
+
+- **8:00 AM IST**
+- **8:00 PM IST**
 
 ```yaml
 on:
   schedule:
     - cron: "30 2 * * *"
     - cron: "30 14 * * *"
+
   workflow_dispatch:
 ```
 
-Manual trigger available via `GitHub → Actions → Run Workflow`.
-
 ---
 
-## 📬 Newsletter Output
+# 🧠 Embedding Pipeline
 
-Each job card in the email contains:
+```mermaid
+flowchart LR
 
-**Core scoring:**
-- Compatibility score + visual score bar
-- Match verdict (Strong / Moderate / Weak / Skip)
-- Match reasons + skill gap
-- Experience requirement
-- Remote badge · Employment type · Posted date
-- Apply Now + View on LinkedIn buttons
+    A[resume_profile.json]
+    B[Natural Language Expansion]
+    C[all-MiniLM-L6-v2]
+    D[Resume Embedding]
+    E[Job Embeddings]
+    F[Cosine Similarity]
+    G[Top Ranked Jobs]
 
-**Intelligence layer** (qualifying jobs only, score ≥ MIN_SCORE):
-- 🔬 **ATS Diagnosis** — ATS score, missing JD keywords (pill badges), weak areas, strong areas
-- 👔 **Recruiter Analysis** — role fit score, commonly required missing skills, candidate differentiators, quick-win skills
-- ✍️ **Tailored Resume** — experience bullets rewritten using Google XYZ formula, ATS keywords naturally incorporated, rendered inline in the email
-
----
-
-## 🧠 Embedding Pipeline
-
-The semantic layer uses `sentence-transformers/all-MiniLM-L6-v2` — a 22MB model that runs locally in GitHub Actions with zero API cost.
-
-**Query Expansion:** Instead of embedding a flat skill list, the resume is converted into a natural-language paragraph that reads like a job seeker's summary. This puts the resume vector in the same semantic space as job descriptions, so even sparse or vaguely-written JDs match correctly.
-
-**Flow:**
-```text
-resume_profile.json
-        │
-        ▼
-Natural-language expansion
-("Looking for a junior-level position as Backend Engineer...")
-        │
-        ▼
-all-MiniLM-L6-v2 → resume embedding (384-dim)
-
-All filtered jobs → job embeddings (384-dim each)
-        │
-        ▼
-Cosine similarity → top 10 jobs → Groq scoring
+    A --> B
+    B --> C
+    C --> D
+    C --> E
+    D --> F
+    E --> F
+    F --> G
 ```
 
-The model is cached between GitHub Actions runs via `actions/cache` — loads in under 1 second after the first run.
-
 ---
 
-## 🔍 Filtering Logic
+# 🔍 Filtering Logic
 
-### Seniority Filter (title-based, strict)
-
-Checks job **title only** — not description — to avoid false positives from JDs that mention "working alongside senior engineers".
+## Seniority Filter
 
 Excluded title keywords:
-`senior` · `sr.` · `lead` · `principal` · `staff` · `architect` · `manager` · `director` · `head of` · `vp` · `10+ years` · `12+ years` · `8+ years`
 
-### Tech Stack Exclusions (full text)
-
-`java` · `spring` · `springboot` · `.net` · `dotnet` · `php` · `android` · `ios` · `react native` · `golang` · `ruby on rails`
-
-### Relevance Keywords (at least one required)
-
-`python` · `fastapi` · `backend` · `data engineer` · `databricks` · `pyspark` · `kafka` · `postgresql` · `etl` · `azure`
+```text
+senior · sr. · lead · principal · architect
+manager · director · vp · head of
+```
 
 ---
 
-## 💰 Estimated Monthly Cost
+## Tech Stack Exclusions
 
-| Service | Estimated Usage | Cost |
-|---|---|---|
-| GitHub Actions | ~60 runs/month | Free |
-| Apify | ~60 runs/month | Free |
-| Groq | ~10 scored + ~15 intelligence calls/run | Free |
-| Resend / SendGrid | ~60 emails/month | Free |
-| sentence-transformers | Local · no API | Free |
-| **Total** | | **~₹0/month** |
+```text
+java · spring · springboot · .net · php
+android · ios · react native
+golang · ruby on rails
+```
 
 ---
 
-## 🧱 Tech Stack
+## Required Keywords
+
+```text
+python · fastapi · backend
+data engineer · databricks
+kafka · pyspark · azure
+postgresql · etl
+```
+
+---
+
+# 💰 Estimated Monthly Cost
+
+| Service | Estimated Cost |
+|---|---|
+| GitHub Actions | Free |
+| Apify | Free |
+| Groq | Free |
+| Resend / SendGrid | Free |
+| Local Embeddings | Free |
+| **Total** | **~₹0/month** |
+
+---
+
+# 🧱 Tech Stack
 
 | Layer | Technology |
 |---|---|
-| Scraping | Apify · LinkedIn Jobs Scraper |
-| Embeddings | `sentence-transformers/all-MiniLM-L6-v2` · numpy |
-| LLM | Groq · `llama-3.1-8b-instant` |
-| PDF Parsing | PyMuPDF (`fitz`) |
+| Scraping | Apify |
+| Embeddings | sentence-transformers |
+| LLM | Groq |
+| PDF Parsing | PyMuPDF |
 | Email | Resend / SendGrid |
 | Automation | GitHub Actions |
 | Language | Python 3.11 |
 
 ---
 
-## 🧯 Troubleshooting
+# 🧯 Troubleshooting
 
-### No email received
-- Check GitHub Actions run logs
-- Verify sender domain is verified in Resend/SendGrid
+## No Email Received
+
+- Check GitHub Actions logs
+- Verify sender domain
 - Check spam folder
 
-### Groq rate limits (429)
-Reduce `EMBEDDING_TOP_N` in the workflow from `10` to `5`:
+---
+
+## Groq Rate Limits
+
+Reduce:
+
 ```yaml
 EMBEDDING_TOP_N: "5"
 ```
 
-### Similarity scores too low / wrong jobs selected
-- Set `REGENERATE_RESUME=true` and re-run to rebuild the profile
-- Check that `CANDIDATE_EXPERIENCE` and `CANDIDATE_SENIORITY` secrets are set correctly
-- Ensure `resumes/latest_resume.pdf` is your most recent resume
+---
 
-### Seniority detected incorrectly in profile
-- `CANDIDATE_SENIORITY` secret overrides all LLM inference — set it to `junior`, `entry`, or `mid` as appropriate
-- Trigger a profile regeneration after updating the secret
+## Wrong Jobs Ranked
 
-### Too many irrelevant jobs passing the filter
-Tighten `RELEVANT_KEYWORDS` or add terms to `NEGATIVE_STACK_KEYWORDS` in `job_agent.py`.
-
-### resume_profile.json not found
-Set `REGENERATE_RESUME=true` and run the workflow once manually. The profile will be generated and committed back to the repo automatically.
+- Regenerate resume profile
+- Update experience/seniority secrets
+- Tighten filtering keywords
 
 ---
 
-## 🔮 Planned Improvements
+## Missing `resume_profile.json`
 
-- Cover letter generation per job
-- Telegram / Slack notification channel
-- Seen job ID deduplication across runs (persistent JSON in repo)
-- Feedback loop — mark jobs as applied / not relevant
-- Multi-location resume variants (backend-focused vs data-focused)
-- ATS score trend tracking over time
+Set:
+
+```text
+REGENERATE_RESUME=true
+```
+
+Run workflow once manually.
 
 ---
 
-## 📄 License
+# 🔮 Planned Improvements
+
+- AI-generated cover letters
+- Telegram / Slack integration
+- Persistent seen-job tracking
+- Historical analytics dashboard
+- Resume variant support
+- Feedback learning loop
+
+---
+
+# 📄 License
 
 MIT License
 
 ---
 
-Built with ❤️ using local embeddings + Groq LLM + GitHub Actions for smarter, nearly free job hunting.
+<div align="center">
+
+### Built with ❤️ using Local Embeddings + Groq + GitHub Actions
+
+#### Smarter · Faster · Nearly Free Job Hunting
+
+</div>
