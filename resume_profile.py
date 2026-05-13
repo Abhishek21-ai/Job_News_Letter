@@ -64,16 +64,28 @@ def extract_resume_text(pdf_path: str) -> str:
 # ──────────────────────────────────────────────────────────────────────────────
 
 def build_prompt(resume_text: str) -> str:
-    # CANDIDATE_EXPERIENCE is stored in GitHub Secrets to override
-    # any LLM inference — prevents freelance/consulting work from
-    # inflating the experience level incorrectly.
+    # Both values stored in GitHub Secrets to override LLM inference.
+    # Prevents freelance/consulting/leadership signals from inflating
+    # experience_level or seniority incorrectly.
     candidate_experience = os.environ.get("CANDIDATE_EXPERIENCE", "").strip()
+    candidate_seniority  = os.environ.get("CANDIDATE_SENIORITY", "").strip()
 
     experience_instruction = (
         f'IMPORTANT: Set "experience_level" to exactly "{candidate_experience}". '
         f'Do NOT infer this from the resume. Use this value verbatim.'
         if candidate_experience
         else 'Infer experience_level from employment timelines only (exclude freelance/consulting).'
+    )
+
+    seniority_instruction = (
+        f'IMPORTANT: Set "seniority" to exactly "{candidate_seniority}". '
+        f'Do NOT infer this from the resume. Use this value verbatim.'
+        if candidate_seniority
+        else (
+            'For "seniority": derive ONLY from industry employment start date, '
+            'ignoring freelance, consulting, leadership signals, or contract work. '
+            'Use one of: "entry", "junior", "mid", "senior".'
+        )
     )
 
     return f"""
@@ -85,9 +97,7 @@ Return ONLY valid JSON. No markdown. No explanation. No ```json wrapper.
 
 {experience_instruction}
 
-For "seniority": derive ONLY from industry employment start date,
-ignoring freelance, consulting, or contract work. Use one of:
-"entry", "junior", "mid", "senior".
+{seniority_instruction}
 
 For "preferred_domains": list engineering domains the candidate
 has direct project experience in (not just mentioned as buzzwords).
