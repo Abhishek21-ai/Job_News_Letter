@@ -96,22 +96,129 @@ LINKEDIN_SEARCH_URLS = [
 # FILTER RULES
 # ──────────────────────────────────────────────────────────────────────────────
 
+# ──────────────────────────────────────────────────────────────────────────────
+# FILTER RULES
+# ──────────────────────────────────────────────────────────────────────────────
+
 RELEVANT_KEYWORDS = [
-    "python", "fastapi", "backend", "data engineer",
-    "databricks", "pyspark", "kafka", "postgresql", "etl", "azure",
+    "python",
+    "fastapi",
+    "backend",
+    "backend engineer",
+    "backend developer",
+    "data engineer",
+    "associate data engineer",
+    "databricks",
+    "pyspark",
+    "spark",
+    "kafka",
+    "postgresql",
+    "etl",
+    "azure",
 ]
 
 # Title-level seniority words — these override LinkedIn's unreliable field.
-# We check the TITLE specifically, not just the full description.
+# Checked ONLY against title.
 SENIOR_TITLE_KEYWORDS = [
-    "senior", "sr.", "lead", "principal", "staff", "architect",
-    "manager", "director", "head of", "vp ", "vice president",
-    "10+ years", "12+ years", "8+ years",
+    "senior",
+    "sr.",
+    "lead",
+    "principal",
+    "staff",
+    "architect",
+    "manager",
+    "director",
+    "head of",
+    "vp ",
+    "vice president",
+    "10+ years",
+    "12+ years",
+    "8+ years",
+]
+
+# Roles/domains we DO NOT want even if stack partially overlaps.
+# This is extremely important because embeddings can incorrectly
+# rank adjacent AI/analytics/networking jobs highly.
+NEGATIVE_TITLE_KEYWORDS = [
+    # AI / ML / DS
+    "data scientist",
+    "ai engineer",
+    "ml engineer",
+    "machine learning",
+    "deep learning",
+    "genai",
+    "llm engineer",
+    "prompt engineer",
+    "computer vision",
+    "nlp engineer",
+    "research engineer",
+    "research scientist",
+
+    # Analytics / BI
+    "visualization analyst",
+    "bi analyst",
+    "business analyst",
+    "data analyst",
+    "reporting analyst",
+    "tableau",
+    "power bi",
+    "analytics consultant",
+
+    # Infra / Networking
+    "network engineer",
+    "system engineer",
+    "infrastructure engineer",
+    "devops engineer",
+    "site reliability engineer",
+    "sre",
+    "cloud support",
+
+    # QA / Support
+    "qa engineer",
+    "test engineer",
+    "automation tester",
+    "support engineer",
+
+    # Frontend / Mobile
+    "frontend",
+    "ui engineer",
+    "ux engineer",
+    "react native",
+    "android",
+    "ios",
+
+    # Non-target backend ecosystems
+    "java developer",
+    ".net developer",
+    "php developer",
+    "golang developer",
 ]
 
 NEGATIVE_STACK_KEYWORDS = [
-    "java", "spring", "springboot", ".net", "dotnet",
-    "php", "android", "ios", "react native", "golang", "ruby on rails",
+    "java",
+    "spring",
+    "springboot",
+    ".net",
+    "dotnet",
+    "php",
+    "android",
+    "ios",
+    "react native",
+    "golang",
+    "ruby on rails",
+]
+
+# Strong positive title signals.
+# At least ONE should exist in title to reduce embedding drift.
+TARGET_TITLE_KEYWORDS = [
+    "backend engineer",
+    "backend developer",
+    "python developer",
+    "python engineer",
+    "data engineer",
+    "associate data engineer",
+    "platform engineer",
+    "software engineer",
 ]
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -171,27 +278,37 @@ def deduplicate(jobs: list[dict]) -> list[dict]:
 
 # ──────────────────────────────────────────────────────────────────────────────
 # PREFILTER
-# Title-based seniority check is separate and stricter than description check.
-# This avoids incorrectly filtering jobs that *mention* "senior" in requirements
-# text but are actually entry-level postings.
+# Much stricter title filtering BEFORE embeddings.
+# Prevents adjacent domains from reaching semantic ranking.
 # ──────────────────────────────────────────────────────────────────────────────
 
 def prefilter_jobs(jobs: list[dict]) -> list[dict]:
     filtered = []
+
     for job in jobs:
-        title = job.get("title", "").lower()
+        title = (job.get("title") or "").lower().strip()
         desc  = (job.get("descriptionText") or "").lower()
         full  = f"{title} {desc}"
 
-        # Title-level seniority check — stricter, uses title only
+        # ── HARD REJECTION: seniority ─────────────────────────
         if any(k in title for k in SENIOR_TITLE_KEYWORDS):
             continue
 
-        # Stack exclusion — uses full text
+        # ── HARD REJECTION: unwanted role/domain ──────────────
+        if any(k in title for k in NEGATIVE_TITLE_KEYWORDS):
+            continue
+
+        # ── HARD REJECTION: wrong stack ───────────────────────
         if any(k in full for k in NEGATIVE_STACK_KEYWORDS):
             continue
 
-        # Must have at least one relevant signal
+        # ── TITLE MUST MATCH TARGET ROLE ──────────────────────
+        # This is the biggest improvement.
+        # Prevents semantic search from drifting into AI/ML/Analytics.
+        if not any(k in title for k in TARGET_TITLE_KEYWORDS):
+            continue
+
+        # ── Must contain at least one relevant tech signal ────
         if not any(k in full for k in RELEVANT_KEYWORDS):
             continue
 
