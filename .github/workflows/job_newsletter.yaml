@@ -7,7 +7,7 @@ on:
     # 8 PM IST (2:30 UTC next day)
     - cron: "30 14 * * *"
 
-  # Manual trigger from GitHub UI
+  # Manual trigger — useful for testing or forcing a profile regeneration
   workflow_dispatch:
 
 jobs:
@@ -23,9 +23,8 @@ jobs:
         with:
           python-version: "3.11"
 
-      # Cache the sentence-transformers model between runs.
-      # Without this, the 22MB model downloads on every run (~10s penalty).
-      # Cache key includes the model name — update it if you change models.
+      # Caches the sentence-transformers model (~22MB) between runs.
+      # After first download, this step takes ~0s.
       - name: Cache sentence-transformers model
         uses: actions/cache@v4
         with:
@@ -34,22 +33,49 @@ jobs:
 
       - name: Install dependencies
         run: pip install -r requirements.txt
-      
-      - name: Generate Resume Profile
-        env:
-          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-        run: |
-          python resume_profile.py
 
+      # ── Resume Profile Generation ────────────────────────────────────────
+      # Controlled by REGENERATE_RESUME secret:
+      #   "true"  → regenerates profile from PDF (use after uploading new resume)
+      #   "false" → skips if resume_profile.json already exists in repo
+      #
+      # How to update your resume:
+      #   1. Commit new PDF to resumes/latest_resume.pdf
+      #   2. Set REGENERATE_RESUME secret to "true"
+      #   3. Run workflow once — profile regenerates and is committed back
+      #   4. Set REGENERATE_RESUME back to "false"
+      - name: Generate Resume Profile (if needed)
+        env:
+          GROQ_API_KEY:         ${{ secrets.GROQ_API_KEY }}
+          REGENERATE_RESUME:    ${{ secrets.REGENERATE_RESUME }}
+          CANDIDATE_EXPERIENCE: ${{ secrets.CANDIDATE_EXPERIENCE }}
+          CANDIDATE_SENIORITY:  ${{ secrets.CANDIDATE_SENIORITY }}
+        run: python resume_profile.py
+
+      # Commit back resume_profile.json if it was regenerated.
+      # On normal runs (REGENERATE_RESUME=false) this is a no-op.
+      - name: Commit resume_profile.json if updated
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add resume_profile.json
+          git diff --staged --quiet || git commit -m "chore: update resume_profile.json [skip ci]"
+          git push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── Main Agent ───────────────────────────────────────────────────────
       - name: Run job agent
         env:
-          APIFY_TOKEN:      ${{ secrets.APIFY_TOKEN }}
-          GROQ_API_KEY:     ${{ secrets.GROQ_API_KEY }}
-          RECIPIENT_EMAIL:  ${{ secrets.RECIPIENT_EMAIL }}
-          SENDER_EMAIL:     ${{ secrets.SENDER_EMAIL }}
-          EMAIL_API_KEY:    ${{ secrets.EMAIL_API_KEY }}
-          EMAIL_PROVIDER:   ${{ secrets.EMAIL_PROVIDER }}
-          MIN_SCORE:        ${{ secrets.MIN_SCORE }}
-          TOP_N:            ${{ secrets.TOP_N }}
-          EMBEDDING_TOP_N:  "10"
+          APIFY_TOKEN:          ${{ secrets.APIFY_TOKEN }}
+          GROQ_API_KEY:         ${{ secrets.GROQ_API_KEY }}
+          RECIPIENT_EMAIL:      ${{ secrets.RECIPIENT_EMAIL }}
+          SENDER_EMAIL:         ${{ secrets.SENDER_EMAIL }}
+          EMAIL_API_KEY:        ${{ secrets.EMAIL_API_KEY }}
+          EMAIL_PROVIDER:       ${{ secrets.EMAIL_PROVIDER }}
+          MIN_SCORE:            ${{ secrets.MIN_SCORE }}
+          TOP_N:                ${{ secrets.TOP_N }}
+          EMBEDDING_TOP_N:      "10"
+          CANDIDATE_EXPERIENCE: ${{ secrets.CANDIDATE_EXPERIENCE }}
+          CANDIDATE_SENIORITY:  ${{ secrets.CANDIDATE_SENIORITY }}
         run: python job_agent.py
