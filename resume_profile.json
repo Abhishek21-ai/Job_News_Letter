@@ -1,0 +1,60 @@
+{
+  "name": "Abhishek Pandey",
+  "primary_roles": [
+    "Software Development Engineer",
+    "Data Engineer"
+  ],
+  "skills": [
+    "Python",
+    "SQL",
+    "Databricks",
+    "PySpark",
+    "Delta Lake",
+    "Data Lakehouse",
+    "ETL",
+    "ELT",
+    "Data Modeling",
+    "Data Pipelines",
+    "FastAPI",
+    "REST APIs",
+    "Microservices Architecture",
+    "PostgreSQL",
+    "Apache Kafka",
+    "Event-Driven Architecture",
+    "GitHub Actions",
+    "Databricks Asset Bundles",
+    "Automated Deployments",
+    "Azure Data Factory",
+    "ADLS Gen2",
+    "Azure SQL",
+    "Splunk"
+  ],
+  "experience_level": "1.5 Years",
+  "seniority": "junior",
+  "core_strengths": [
+    "Designing and building scalable ETL/ELT pipelines",
+    "Backend services and cloud-native data platforms",
+    "Metadata-driven architectures",
+    "Event-driven systems",
+    "Automated CI/CD workflows"
+  ],
+  "preferred_domains": [
+    "Data Engineering",
+    "Backend Development",
+    "Cloud & Data Services"
+  ],
+  "certifications": [
+    "Databricks Certified Data Engineer Professional"
+  ],
+  "education": "Master of Science (M.Sc.) in Computer Science, Savitribai Phule Pune University 2024",
+  "leadership_signals": [
+    "Led a 4-member team to deliver a governed self-service Data Product Platform",
+    "Managed project planning, requirement gathering, stakeholder communication, and successful delivery across multiple parallel engagements"
+  ],
+  "target_locations": [
+    "Pune",
+    "Bangalore",
+    "Hyderabad",
+    "Remote India"
+  ]
+}
