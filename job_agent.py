@@ -41,8 +41,7 @@ CANDIDATE_EXPERIENCE = os.environ.get("CANDIDATE_EXPERIENCE", "1.5 years").strip
 # entry | junior | mid — overrides LinkedIn seniorityLevel which is unreliable
 CANDIDATE_SENIORITY  = os.environ.get("CANDIDATE_SENIORITY", "junior").strip()
 
-TAILORED_RESUME_DIR = Path("resumes/tailored")
-PROFILE_PATH        = Path("resume_profile.json")
+PROFILE_PATH = Path("resume_profile.json")
 
 # ──────────────────────────────────────────────────────────────────────────────
 # LOAD RESUME PROFILE
@@ -428,8 +427,9 @@ Return ONLY valid JSON:
 # ACTOR 3 — REWRITER
 # Rewrites resume bullet points using the Google XYZ formula:
 # "Accomplished [X] as measured by [Y] by doing [Z]"
-# Preserves exact structure — only rewrites content, not format.
-# Saves tailored resume to resumes/tailored/ with standard naming.
+# Returns the rewritten content as a string — rendered inline in the email.
+# (Saving to disk is not used: GitHub Actions runner is ephemeral and files
+# are lost after the workflow ends unless committed back to the repo.)
 # ──────────────────────────────────────────────────────────────────────────────
 
 def run_rewriter(
@@ -437,10 +437,10 @@ def run_rewriter(
     candidate_context: str,
     diagnoser_output: dict,
     recruiter_output: dict,
-    date_str: str,
 ) -> str:
     """
-    Returns the filename of the saved tailored resume (relative path).
+    Returns the tailored resume content as a plain-text string.
+    The caller attaches it to the job dict; email_sender renders it inline.
     """
     title       = job.get("title", "")
     company     = job.get("companyName", "Unknown")
@@ -478,7 +478,7 @@ STRICT RULES:
 6. Keep it concise — max 4 bullet points per role
 7. End with a "Key Skills for this Role" section listing relevant skills only
 
-Output the full rewritten experience section only (not the entire resume).
+Output the rewritten experience section only (not the entire resume).
 """
     try:
         rewritten = groq_text(
@@ -494,25 +494,9 @@ Output the full rewritten experience section only (not the entire resume).
         print(f"    ⚠ Rewriter failed: {e}")
         rewritten = "Resume rewrite unavailable for this job."
 
-    # Save tailored resume
-    TAILORED_RESUME_DIR.mkdir(parents=True, exist_ok=True)
-
-    safe_company = re.sub(r"[^a-zA-Z0-9]", "_", company)[:20]
-    safe_title   = re.sub(r"[^a-zA-Z0-9]", "_", title)[:25]
-    safe_date    = date_str.replace(" ", "_").replace(",", "")
-
-    filename = f"{safe_company}_{safe_title}_{safe_date}.txt"
-    filepath = TAILORED_RESUME_DIR / filename
-
-    with open(filepath, "w") as f:
-        f.write(f"TAILORED RESUME — {title} at {company}\n")
-        f.write(f"Generated: {date_str}\n")
-        f.write("=" * 60 + "\n\n")
-        f.write(rewritten)
-
-    print(f"    💾 Tailored resume saved: {filepath}")
+    print(f"    ✅ Rewriter complete ({len(rewritten)} chars)")
     time.sleep(1)
-    return str(filepath)
+    return rewritten
 
 # ──────────────────────────────────────────────────────────────────────────────
 # INTELLIGENCE LAYER — orchestrates all three actors
@@ -526,6 +510,7 @@ def run_intelligence_layer(
     """
     Runs Diagnoser → Recruiter → Rewriter for a single qualifying job.
     Returns a dict with all intelligence outputs attached.
+    tailored_resume_content is a plain-text string rendered inline in the email.
     """
     title   = job.get("title", "?")
     company = job.get("companyName", "?")
@@ -539,13 +524,13 @@ def run_intelligence_layer(
     recruiter = run_recruiter(job, candidate_context)
 
     print(f"    ✍️  Rewriter running...")
-    resume_path = run_rewriter(job, candidate_context, diagnoser, recruiter, date_str)
+    resume_content = run_rewriter(job, candidate_context, diagnoser, recruiter)
 
     return {
         **job,
-        "diagnoser":    diagnoser,
-        "recruiter":    recruiter,
-        "resume_path":  resume_path,
+        "diagnoser":               diagnoser,
+        "recruiter":               recruiter,
+        "tailored_resume_content": resume_content,
     }
 
 # ──────────────────────────────────────────────────────────────────────────────
