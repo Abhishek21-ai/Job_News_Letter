@@ -4,49 +4,79 @@ on:
   schedule:
     # 8 AM IST (2:30 UTC)
     - cron: "30 2 * * *"
-    # 8 PM IST (2:30 UTC next day)
+
+    # 8 PM IST (14:30 UTC)
     - cron: "30 14 * * *"
 
-  # Manual trigger — useful for testing or forcing a profile regeneration
+  # Manual trigger for testing/debugging
   workflow_dispatch:
-  
+
 permissions:
   contents: write
-  
+
 jobs:
   run-agent:
     runs-on: ubuntu-latest
 
+    # Prevent overlapping runs
+    concurrency:
+      group: job-newsletter-agent
+      cancel-in-progress: false
+
     steps:
+      # ─────────────────────────────────────────────────────────────
+      # CHECKOUT
+      # ─────────────────────────────────────────────────────────────
       - name: Checkout repo
         uses: actions/checkout@v4
 
+      # ─────────────────────────────────────────────────────────────
+      # PYTHON SETUP
+      # ─────────────────────────────────────────────────────────────
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      # Caches the sentence-transformers model (~22MB) between runs.
-      # After first download, this step takes ~0s.
-      - name: Cache sentence-transformers model
+      # ─────────────────────────────────────────────────────────────
+      # CACHE PIP DEPENDENCIES
+      # Saves GitHub Actions minutes significantly
+      # ─────────────────────────────────────────────────────────────
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      # ─────────────────────────────────────────────────────────────
+      # CACHE HUGGINGFACE MODEL
+      # Prevents repeated embedding model downloads
+      # ─────────────────────────────────────────────────────────────
+      - name: Cache HuggingFace model
         uses: actions/cache@v4
         with:
           path: ~/.cache/huggingface
           key: hf-model-all-MiniLM-L6-v2
 
+      # ─────────────────────────────────────────────────────────────
+      # INSTALL DEPENDENCIES
+      # ─────────────────────────────────────────────────────────────
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
 
-      # ── Resume Profile Generation ────────────────────────────────────────
-      # Controlled by REGENERATE_RESUME secret:
-      #   "true"  → regenerates profile from PDF (use after uploading new resume)
-      #   "false" → skips if resume_profile.json already exists in repo
+      # ─────────────────────────────────────────────────────────────
+      # GENERATE RESUME PROFILE (ONLY WHEN REQUIRED)
       #
-      # How to update your resume:
-      #   1. Commit new PDF to resumes/latest_resume.pdf
-      #   2. Set REGENERATE_RESUME secret to "true"
-      #   3. Run workflow once — profile regenerates and is committed back
-      #   4. Set REGENERATE_RESUME back to "false"
+      # To regenerate:
+      # 1. Upload new resume PDF
+      # 2. Set REGENERATE_RESUME=true in GitHub Secrets
+      # 3. Run workflow once
+      # 4. Set REGENERATE_RESUME=false again
+      # ─────────────────────────────────────────────────────────────
       - name: Generate Resume Profile (if needed)
         env:
           GROQ_API_KEY:         ${{ secrets.GROQ_API_KEY }}
@@ -55,19 +85,29 @@ jobs:
           CANDIDATE_SENIORITY:  ${{ secrets.CANDIDATE_SENIORITY }}
         run: python resume_profile.py
 
-      # Commit back resume_profile.json if it was regenerated.
-      # On normal runs (REGENERATE_RESUME=false) this is a no-op.
+      # ─────────────────────────────────────────────────────────────
+      # COMMIT UPDATED PROFILE
+      # Only commits when resume_profile.json changes
+      # ─────────────────────────────────────────────────────────────
       - name: Commit resume_profile.json if updated
         run: |
-          git config user.name  "github-actions[bot]"
+          git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+
           git add resume_profile.json
-          git diff --staged --quiet || git commit -m "chore: update resume_profile.json [skip ci]"
-          git push
+
+          if git diff --staged --quiet; then
+            echo "No changes detected."
+          else
+            git commit -m "chore: update resume profile [skip ci]"
+            git push
+          fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # ── Main Agent ───────────────────────────────────────────────────────
+      # ─────────────────────────────────────────────────────────────
+      # RUN MAIN JOB AGENT
+      # ─────────────────────────────────────────────────────────────
       - name: Run job agent
         env:
           APIFY_TOKEN:          ${{ secrets.APIFY_TOKEN }}
@@ -82,3 +122,17 @@ jobs:
           CANDIDATE_EXPERIENCE: ${{ secrets.CANDIDATE_EXPERIENCE }}
           CANDIDATE_SENIORITY:  ${{ secrets.CANDIDATE_SENIORITY }}
         run: python job_agent.py
+
+      # ─────────────────────────────────────────────────────────────
+      # OPTIONAL DEBUG LOG UPLOAD
+      # Uploads logs only if workflow fails
+      # ─────────────────────────────────────────────────────────────
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: workflow-logs
+          path: |
+            *.log
+            *.txt
+          if-no-files-found: ignore
