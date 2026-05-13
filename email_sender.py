@@ -250,11 +250,136 @@ def job_card_html(job: dict, rank: int) -> str:
     """
 
 
+
+# ──────────────────────────────────────────────────────────────────────────────
+# REJECTED JOBS FEEDBACK SECTION
+# ──────────────────────────────────────────────────────────────────────────────
+
+def rejected_feedback_html(rejected_jobs: list[dict], min_score: int) -> str:
+    """
+    Renders a compact feedback table of all jobs that were scored but
+    didn't meet MIN_SCORE. Shows score, gap, and a direct LinkedIn link
+    so you can manually inspect any JD that looks promising.
+    """
+    if not rejected_jobs:
+        return ""
+
+    rows = ""
+    for job in rejected_jobs:
+        score   = job.get("score", 0)
+        title   = job.get("title", "Unknown Role")
+        company = job.get("companyName", "Unknown")
+        verdict = job.get("verdict", "")
+        gap     = job.get("gap", "—")
+        exp_req = job.get("exp_required", "?")
+        link    = job.get("applyUrl") or job.get("link", "#")
+        sim     = job.get("similarity_score", "?")
+
+        # Score colour — shows how close to threshold each job was
+        if score >= min_score - 10:
+            score_color = "#d97706"   # amber — close miss
+            score_bg    = "#fef3c7"
+        else:
+            score_color = "#6b7280"   # grey — clear reject
+            score_bg    = "#f3f4f6"
+
+        verdict_icons = {
+            "Moderate Match": "🟡",
+            "Weak Match":     "⚠️",
+            "Skip":           "❌",
+        }
+        icon = verdict_icons.get(verdict, "•")
+
+        rows += f"""
+        <tr>
+          <td style="padding:10px 12px;border-bottom:1px solid #f3f4f6;vertical-align:top;">
+            <div style="font-size:13px;font-weight:600;color:#111827;">{title}</div>
+            <div style="font-size:11px;color:#6b7280;margin-top:2px;">🏢 {company}</div>
+          </td>
+          <td style="padding:10px 8px;border-bottom:1px solid #f3f4f6;
+                     text-align:center;vertical-align:top;white-space:nowrap;">
+            <span style="background:{score_bg};color:{score_color};font-weight:700;
+                         font-size:13px;border-radius:6px;padding:3px 8px;">
+              {score}/100
+            </span>
+            <div style="font-size:10px;color:#9ca3af;margin-top:3px;">{icon} {verdict}</div>
+          </td>
+          <td style="padding:10px 8px;border-bottom:1px solid #f3f4f6;vertical-align:top;">
+            <div style="font-size:11px;color:#374151;">
+              <strong>Gap:</strong> {gap}
+            </div>
+            <div style="font-size:11px;color:#9ca3af;margin-top:2px;">
+              Exp: {exp_req} · sim: {sim}
+            </div>
+          </td>
+          <td style="padding:10px 8px;border-bottom:1px solid #f3f4f6;
+                     text-align:right;vertical-align:top;white-space:nowrap;">
+            <a href="{link}"
+               style="color:#1d4ed8;font-size:11px;text-decoration:none;
+                      border:1px solid #bfdbfe;padding:4px 10px;border-radius:6px;
+                      display:inline-block;">
+              View JD →
+            </a>
+          </td>
+        </tr>
+        """
+
+    close_misses = [j for j in rejected_jobs if j.get("score", 0) >= min_score - 10]
+    close_miss_note = (
+        f'<p style="font-size:12px;color:#d97706;margin:0 0 10px;">'
+        f'⚠️ <strong>{len(close_misses)} close miss(es)</strong> — '
+        f'within 10 points of threshold. Worth a manual check.</p>'
+        if close_misses else ""
+    )
+
+    return f"""
+    <!-- Feedback Section -->
+    <div style="margin-top:32px;">
+      <div style="border-left:4px solid #6b7280;padding-left:12px;margin-bottom:16px;">
+        <h2 style="font-size:16px;font-weight:700;color:#374151;margin:0;">
+          📋 Rejected Jobs — Why They Didn't Qualify
+        </h2>
+        <p style="font-size:12px;color:#9ca3af;margin:4px 0 0;">
+          Scored but below {min_score}/100 threshold ·
+          {len(rejected_jobs)} jobs reviewed
+        </p>
+      </div>
+      {close_miss_note}
+      <div style="background:#ffffff;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;">
+        <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+          <thead>
+            <tr style="background:#f9fafb;">
+              <th style="padding:8px 12px;text-align:left;font-size:11px;
+                         color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;">
+                JOB
+              </th>
+              <th style="padding:8px 8px;text-align:center;font-size:11px;
+                         color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;">
+                SCORE
+              </th>
+              <th style="padding:8px 8px;text-align:left;font-size:11px;
+                         color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;">
+                REASON
+              </th>
+              <th style="padding:8px 8px;text-align:right;font-size:11px;
+                         color:#6b7280;font-weight:600;border-bottom:1px solid #e5e7eb;">
+                LINK
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    """
+
 # ──────────────────────────────────────────────────────────────────────────────
 # EMAIL BUILDER
 # ──────────────────────────────────────────────────────────────────────────────
 
-def build_html_email(jobs: list[dict], date_str: str, min_score: int) -> str:
+def build_html_email(jobs: list[dict], date_str: str, min_score: int, rejected_jobs: list[dict] | None = None) -> str:
     strong   = [j for j in jobs if j.get("score", 0) >= 80]
     moderate = [j for j in jobs if 65 <= j.get("score", 0) < 80]
 
@@ -318,6 +443,7 @@ def build_html_email(jobs: list[dict], date_str: str, min_score: int) -> str:
           ✍️ Tailored Resume (XYZ formula) included per job.
         </p>
         {cards_html}
+        {rejected_feedback_html(rejected_jobs or [], min_score)}
       </td></tr>
 
       <!-- Footer -->
@@ -390,9 +516,10 @@ def send_newsletter(
     provider: str,
     date_str: str,
     min_score: int,
+    rejected_jobs: list[dict] | None = None,
 ):
     print(f"📧 Building HTML email ({len(jobs)} jobs)...")
-    html = build_html_email(jobs, date_str, min_score)
+    html = build_html_email(jobs, date_str, min_score, rejected_jobs)
 
     print(f"  Sending via {provider} → {recipient}")
     if provider == "resend":
