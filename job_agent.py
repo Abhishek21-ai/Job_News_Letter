@@ -134,6 +134,10 @@ SENIOR_TITLE_KEYWORDS = [
     "10+ years", "12+ years", "8+ years",
 ]
 
+NEGATIVE_STACK_KEYWORDS = [
+    "java", "spring", "springboot", ".net", "dotnet",
+    "php", "android", "ios", "react native", "golang", "ruby on rails",
+]
 
 
 # ──────────────────────────────────────────────────────────────────────────────
