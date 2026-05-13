@@ -96,34 +96,9 @@ LINKEDIN_SEARCH_URLS = [
 # FILTER RULES
 # ──────────────────────────────────────────────────────────────────────────────
 
-# Require at least one of these in the JD body
 RELEVANT_KEYWORDS = [
-    "python",
-    "fastapi",
-    "data engineer",      # exact phrase — won't match "data scientist"
-    "data pipeline",
-    "databricks",
-    "pyspark",
-    "kafka",
-    "etl",
-    "azure data",
-    "backend engineer",
-    "platform engineer",
-]
-
-# Block these in the title specifically (not description)
-NEGATIVE_TITLE_KEYWORDS = [
-    "data scientist",
-    "data science",
-    "data analyst",
-    "data coach",
-    "machine learning",
-    "ml engineer",
-    "network engineer",
-    "visualization",
-    "devops",
-    "site reliability",   # SRE is adjacent but not your target
-    "security engineer",
+    "python", "fastapi", "backend", "data engineer",
+    "databricks", "pyspark", "kafka", "postgresql", "etl", "azure",
 ]
 
 # Title-level seniority words — these override LinkedIn's unreliable field.
@@ -138,7 +113,6 @@ NEGATIVE_STACK_KEYWORDS = [
     "java", "spring", "springboot", ".net", "dotnet",
     "php", "android", "ios", "react native", "golang", "ruby on rails",
 ]
-
 
 # ──────────────────────────────────────────────────────────────────────────────
 # SCRAPE
@@ -209,19 +183,15 @@ def prefilter_jobs(jobs: list[dict]) -> list[dict]:
         desc  = (job.get("descriptionText") or "").lower()
         full  = f"{title} {desc}"
 
-        # Title-based seniority exclusion (existing)
+        # Title-level seniority check — stricter, uses title only
         if any(k in title for k in SENIOR_TITLE_KEYWORDS):
             continue
 
-        # Title-based role exclusion — blocks adjacent roles by name
-        if any(k in title for k in NEGATIVE_TITLE_KEYWORDS):
-            continue
-
-        # Stack exclusion on full text (existing)
+        # Stack exclusion — uses full text
         if any(k in full for k in NEGATIVE_STACK_KEYWORDS):
             continue
 
-        # Must have at least one strong relevance signal
+        # Must have at least one relevant signal
         if not any(k in full for k in RELEVANT_KEYWORDS):
             continue
 
@@ -229,6 +199,7 @@ def prefilter_jobs(jobs: list[dict]) -> list[dict]:
 
     print(f"🔍 Prefiltered to {len(filtered)} relevant jobs")
     return filtered
+
 # ──────────────────────────────────────────────────────────────────────────────
 # GROQ HELPER
 # ──────────────────────────────────────────────────────────────────────────────
@@ -349,15 +320,34 @@ def score_all_jobs(jobs: list[dict], candidate_context: str) -> list[dict]:
     print(f"🤖 Scoring {len(jobs)} jobs with Groq...")
     scored = []
     for i, job in enumerate(jobs):
-        print(
-            f"  [{i+1}/{len(jobs)}] {job.get('title','?')} @ "
-            f"{job.get('companyName','?')} (sim: {job.get('similarity_score','?')})"
-        )
-        scored.append(score_job(job, candidate_context))
-        # 7s between calls keeps TPM well under the 6k/min free tier cap
-        # (each scorer call ≈ 600 tokens → 7s gap → ~5,100 TPM max)
+        title   = job.get("title", "?")
+        company = job.get("companyName", "?")
+        sim     = job.get("similarity_score", "?")
+        link    = job.get("applyUrl") or job.get("link", "no link")
+
+        print(f"\n  [{i+1}/{len(jobs)}] {title} @ {company}")
+        print(f"    sim: {sim} | 🔗 {link}")
+
+        result = score_job(job, candidate_context)
+        scored.append(result)
+
+        groq_score = result.get("score", "?")
+        verdict    = result.get("verdict", "?")
+        gap        = result.get("gap", "?")
+        exp_req    = result.get("exp_required", "?")
+        reasons    = result.get("match_reasons", [])
+        threshold  = "✅ QUALIFIES" if isinstance(groq_score, int) and groq_score >= MIN_SCORE else "❌ below threshold"
+
+        print(f"    score: {groq_score}/100 ({verdict}) {threshold}")
+        print(f"    exp required: {exp_req}")
+        print(f"    gap: {gap}")
+        for r in reasons:
+            print(f"    + {r}")
+
+        # 7s gap keeps TPM under Groq free tier (~600 tokens/call)
         if i < len(jobs) - 1:
             time.sleep(7)
+
     return scored
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -570,10 +560,24 @@ def run_intelligence_layer(
 # ──────────────────────────────────────────────────────────────────────────────
 
 def filter_and_rank(scored_jobs: list[dict]) -> list[dict]:
+    # Print a final summary table so the Actions log clearly shows
+    # every job's score and why it was accepted or rejected
+    print(f"\n{'─'*60}")
+    print(f"  SCORING SUMMARY (threshold: {MIN_SCORE})")
+    print(f"{'─'*60}")
+    for job in sorted(scored_jobs, key=lambda x: x.get("score", 0), reverse=True):
+        s       = job.get("score", 0)
+        title   = job.get("title", "?")[:40]
+        company = job.get("companyName", "?")[:25]
+        verdict = job.get("verdict", "?")
+        status  = "✅" if s >= MIN_SCORE else "❌"
+        print(f"  {status} {s:>3}/100  {title} @ {company}  ({verdict})")
+    print(f"{'─'*60}\n")
+
     filtered = [j for j in scored_jobs if j.get("score", 0) >= MIN_SCORE]
     filtered.sort(key=lambda x: x.get("score", 0), reverse=True)
     top = filtered[:TOP_N]
-    print(f"✅ {len(top)} jobs meet score threshold (≥{MIN_SCORE})")
+    print(f"✅ {len(top)} jobs qualify (score ≥{MIN_SCORE}), {len(scored_jobs) - len(top)} rejected")
     return top
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -618,21 +622,36 @@ def main():
 
     # ── Step 7: Filter by score ───────────────────────────────
     top_jobs = filter_and_rank(scored_jobs)
+
+    # Rejected jobs = scored but below threshold — passed to newsletter
+    # as a separate feedback section so you can see why they were skipped.
+    rejected_jobs = [
+        j for j in scored_jobs
+        if j.get("score", 0) < MIN_SCORE
+    ]
+    rejected_jobs.sort(key=lambda x: x.get("score", 0), reverse=True)
+
     if not top_jobs:
         print("📭 No jobs met the score threshold today.")
-        return
+        # Still send email if there are rejected jobs worth reviewing
+        if not rejected_jobs:
+            return
 
     # ── Step 8: Intelligence layer (Diagnoser+Recruiter+Rewriter)
     # Runs only on qualifying jobs to minimise Groq usage.
-    print(f"\n🧠 Running intelligence layer on {len(top_jobs)} qualifying jobs...")
-    enriched_jobs = []
-    for job in top_jobs:
-        enriched = run_intelligence_layer(job, candidate_ctx, today)
-        enriched_jobs.append(enriched)
+    if top_jobs:
+        print(f"\n🧠 Running intelligence layer on {len(top_jobs)} qualifying jobs...")
+        enriched_jobs = []
+        for job in top_jobs:
+            enriched = run_intelligence_layer(job, candidate_ctx, today)
+            enriched_jobs.append(enriched)
+    else:
+        enriched_jobs = []
 
     # ── Step 9: Send newsletter ───────────────────────────────
     send_newsletter(
         jobs=enriched_jobs,
+        rejected_jobs=rejected_jobs,
         recipient=RECIPIENT_EMAIL,
         sender=SENDER_EMAIL,
         api_key=EMAIL_API_KEY,
