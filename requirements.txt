@@ -2,5 +2,4 @@ requests
 sentence-transformers
 numpy
 PyMuPDF
-scikit-learn
 groq
