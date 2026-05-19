@@ -110,7 +110,7 @@ def recruiter_html(data: dict) -> str:
     """
 
 
-def tailored_resume_html(content: str, title: str, company: str) -> str:
+def tailored_resume_html(content: str, title: str, company: str, ats_before: int = 0, ats_after: int = 0) -> str:
     if not content or content == "Resume rewrite unavailable for this job.":
         return ""
 
@@ -136,10 +136,12 @@ def tailored_resume_html(content: str, title: str, company: str) -> str:
     return f"""
     <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;
                 padding:14px;margin-top:10px;">
-      <div style="display:flex;align-items:center;margin-bottom:10px;">
+      <div style="display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:10px;">
         <span style="font-size:13px;font-weight:700;color:#1e3a5f;">✍️ Tailored Resume</span>
-        <span style="margin-left:8px;background:#dbeafe;color:#1e40af;border-radius:10px;
+        <span style="background:#dbeafe;color:#1e40af;border-radius:10px;
                      padding:2px 8px;font-size:11px;">XYZ Formula · {company}</span>
+        {f'<span style="background:#fee2e2;color:#991b1b;border-radius:10px;padding:2px 8px;font-size:11px;font-weight:700;">ATS Before: {ats_before}/100</span>' if ats_before else ''}
+        {f'<span style="background:#d1fae5;color:#065f46;border-radius:10px;padding:2px 8px;font-size:11px;font-weight:700;">ATS After: {ats_after}/100</span>' if ats_after else ''}
       </div>
       <div style="border-left:3px solid #3b82f6;padding-left:12px;font-family:monospace;">
         {lines_html}
@@ -243,7 +245,7 @@ def job_card_html(job: dict, rank: int) -> str:
         <!-- Intelligence layer — only rendered when present -->
         {diagnoser_html(diagnoser_data)}
         {recruiter_html(recruiter_data)}
-        {tailored_resume_html(resume_content, title, company)}
+        {tailored_resume_html(resume_content, title, company, job.get("ats_score_before", 0), job.get("ats_score_after", 0))}
 
       </div>
     </div>
