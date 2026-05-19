@@ -208,6 +208,37 @@ NEGATIVE_STACK_KEYWORDS = [
     "ruby on rails",
 ]
 
+# Title-level role exclusions — blocks adjacent roles whose descriptions
+# mention Python/Databricks incidentally but are the wrong domain entirely.
+NEGATIVE_TITLE_KEYWORDS = [
+    "data scientist",
+    "data science",
+    "data analyst",
+    "data coach",
+    "machine learning",
+    "ml engineer",
+    "ai and ml",
+    "network engineer",
+    "visualization",
+    "visualisation",
+    "devops",
+    "site reliability",
+    "sre",
+    "security engineer",
+    "power bi",
+    "tableau",
+    "business analyst",
+    "business intelligence",
+    "bi developer",
+    "bi analyst",
+    "salesforce",
+    "qa engineer",
+    "test engineer",
+    "scrum master",
+    "product manager",
+    "project manager",
+]
+
 # Strong positive title signals.
 # At least ONE should exist in title to reduce embedding drift.
 TARGET_TITLE_KEYWORDS = [
@@ -481,40 +512,71 @@ def score_all_jobs(jobs: list[dict], candidate_context: str) -> list[dict]:
 # ──────────────────────────────────────────────────────────────────────────────
 
 def run_diagnoser(job: dict, candidate_context: str) -> dict:
+    """
+    Reads the JD line by line and extracts every required skill, tool,
+    and keyword. Then cross-checks each one against the candidate profile.
+    Gap = what the JD explicitly requires that the candidate does NOT have.
+    Never flags resume skills as gaps — only JD requirements.
+    Also scores the CURRENT resume ATS match before rewriting.
+    """
     title       = job.get("title", "")
-    description = (job.get("descriptionText") or "")[:800]
+    company     = job.get("companyName", "")
+    description = (job.get("descriptionText") or "")[:1200]
 
     prompt = f"""
-You are a senior ATS (Applicant Tracking System) evaluating a candidate.
+You are a senior ATS system doing a strict JD-vs-resume match analysis.
 
-CANDIDATE:
+YOUR ONLY JOB: Compare the JD requirements against the candidate profile.
+A gap = something the JD REQUIRES that the candidate does NOT have.
+A gap is NEVER a skill the candidate has that the JD doesn't mention.
+
+STEP 1 — Extract from the JD every required skill, tool, technology, and keyword.
+STEP 2 — For each extracted requirement, check if the candidate has it.
+STEP 3 — Missing = required by JD but absent from candidate. Present = candidate has it.
+STEP 4 — Score the current resume ATS match based on coverage of JD requirements.
+
+CANDIDATE PROFILE:
 {candidate_context}
 
-JOB: {title}
+JOB TITLE: {title} at {company}
+FULL JOB DESCRIPTION:
 {description}
 
-Diagnose the candidate's profile against this specific job.
-Be specific — reference actual skills/keywords from the JD.
+RULES:
+- missing_keywords: ONLY keywords that appear in the JD AND are absent from the candidate
+- weak_areas: ONLY genuine gaps between JD requirements and candidate profile
+- Do NOT flag FastAPI as missing if the JD does not mention FastAPI
+- Do NOT flag any candidate skill as a gap — gaps come from the JD only
+- strong_areas: candidate skills that the JD explicitly requires or strongly prefers
+- ats_score: percentage of JD requirements the current resume covers (0-100)
+- ats_verdict: one specific sentence citing the biggest actual gap from the JD
 
 Return ONLY valid JSON:
 {{
   "ats_score": 0-100,
-  "weak_areas": ["specific weakness 1", "specific weakness 2"],
-  "missing_keywords": ["keyword from JD not in resume"],
-  "strong_areas": ["what the candidate does well for this role"],
-  "ats_verdict": "one sentence summary"
+  "jd_required_skills": ["every skill/tool explicitly required in the JD"],
+  "missing_keywords": ["JD-required skills absent from candidate — JD source only"],
+  "present_keywords": ["JD-required skills the candidate already has"],
+  "weak_areas": ["specific JD requirement the candidate does not meet"],
+  "strong_areas": ["candidate strengths that directly match JD requirements"],
+  "ats_verdict": "one specific sentence about the biggest real gap from this JD"
 }}
 """
     try:
         result = groq_json(
-            system="You are a strict ATS evaluator. Return ONLY valid JSON.",
+            system=(
+                "You are a strict ATS evaluator. "
+                "Gaps come ONLY from JD requirements, never from candidate skills. "
+                "Return ONLY valid JSON."
+            ),
             user=prompt,
-            max_tokens=400,
+            max_tokens=600,
         )
     except Exception as e:
         print(f"    ⚠ Diagnoser failed: {e}")
         result = {
-            "ats_score": 0, "weak_areas": [], "missing_keywords": [],
+            "ats_score": 0, "jd_required_skills": [], "missing_keywords": [],
+            "present_keywords": [], "weak_areas": [],
             "strong_areas": [], "ats_verdict": "Analysis unavailable",
         }
 
@@ -528,42 +590,64 @@ Return ONLY valid JSON:
 # ──────────────────────────────────────────────────────────────────────────────
 
 def run_recruiter(job: dict, candidate_context: str) -> dict:
+    """
+    Reads THIS JD specifically — not generic role expectations.
+    Scores fit based on what this company explicitly wants.
+    Quick wins are tied to THIS JD's requirements, not industry averages.
+    PySpark === Apache Spark — never flags synonyms as missing.
+    """
     title       = job.get("title", "")
-    description = (job.get("descriptionText") or "")[:800]
+    company     = job.get("companyName", "")
+    description = (job.get("descriptionText") or "")[:1200]
 
     prompt = f"""
-You are a senior technical recruiter who has reviewed hundreds of {title} JDs.
+You are a senior technical recruiter evaluating a candidate for THIS specific job.
+You are NOT giving generic career advice. You are assessing fit for this one JD.
 
-CANDIDATE:
+CANDIDATE PROFILE:
 {candidate_context}
 
-THIS JOB: {title}
+THIS SPECIFIC JOB: {title} at {company}
+FULL JOB DESCRIPTION:
 {description}
 
-Compare the candidate against what top companies typically require for {title} roles.
-Focus on gaps that appear across most JDs, not just this one.
+STRICT RULES:
+1. Base ALL analysis on what THIS JD says — not industry generalizations
+2. Treat synonyms as equivalent: PySpark = Apache Spark, Postgres = PostgreSQL,
+   Kafka = Apache Kafka, ADF = Azure Data Factory, ADLS = Azure Data Lake Storage
+3. commonly_required_missing: only skills THIS JD explicitly mentions that the candidate lacks
+4. candidate_differentiators: candidate strengths that THIS JD would value
+5. quick_wins: specific skills from THIS JD the candidate could add quickly
+6. role_fit_score: how well this candidate fits THIS specific JD (0-100)
+7. recruiter_verdict: one honest sentence about fit for THIS role specifically
 
 Return ONLY valid JSON:
 {{
   "role_fit_score": 0-100,
-  "commonly_required_missing": ["skill/tool seen in most {title} JDs but absent from candidate"],
-  "candidate_differentiators": ["what makes this candidate stand out for this role"],
-  "quick_wins": ["skill to add in 1-2 weeks that would improve fit significantly"],
-  "recruiter_verdict": "one sentence honest assessment"
+  "this_jd_requires": ["explicit requirements from this JD"],
+  "commonly_required_missing": ["from THIS JD only — skills candidate lacks"],
+  "candidate_differentiators": ["candidate strengths THIS JD explicitly values"],
+  "quick_wins": ["specific skills from THIS JD the candidate could learn in 1-2 weeks"],
+  "recruiter_verdict": "one specific honest sentence about fit for this exact role"
 }}
 """
     try:
         result = groq_json(
-            system="You are a strict JSON generator. Return ONLY valid JSON.",
+            system=(
+                "You are a strict technical recruiter. "
+                "Base ALL analysis on the provided JD only. "
+                "Treat PySpark and Apache Spark as identical. "
+                "Return ONLY valid JSON."
+            ),
             user=prompt,
-            max_tokens=400,
+            max_tokens=500,
         )
     except Exception as e:
         print(f"    ⚠ Recruiter failed: {e}")
         result = {
-            "role_fit_score": 0, "commonly_required_missing": [],
-            "candidate_differentiators": [], "quick_wins": [],
-            "recruiter_verdict": "Analysis unavailable",
+            "role_fit_score": 0, "this_jd_requires": [],
+            "commonly_required_missing": [], "candidate_differentiators": [],
+            "quick_wins": [], "recruiter_verdict": "Analysis unavailable",
         }
 
     time.sleep(1)
@@ -583,66 +667,96 @@ def run_rewriter(
     candidate_context: str,
     diagnoser_output: dict,
     recruiter_output: dict,
-) -> str:
+) -> dict:
     """
-    Returns the tailored resume content as a plain-text string.
-    The caller attaches it to the job dict; email_sender renders it inline.
+    Rewrites resume bullets specifically for THIS JD.
+    Returns a dict with:
+      - rewritten_bullets: the tailored experience section
+      - ats_score_before: current resume ATS score (from diagnoser)
+      - ats_score_after:  estimated ATS score after rewrite
+    Human-sounding, not AI-sounding. XYZ formula applied naturally.
     """
-    title       = job.get("title", "")
-    company     = job.get("companyName", "Unknown")
-    description = (job.get("descriptionText") or "")[:600]
-
+    title            = job.get("title", "")
+    company          = job.get("companyName", "Unknown")
+    description      = (job.get("descriptionText") or "")[:1200]
     missing_keywords = diagnoser_output.get("missing_keywords", [])
-    quick_wins       = recruiter_output.get("quick_wins", [])
+    present_keywords = diagnoser_output.get("present_keywords", [])
+    jd_required      = diagnoser_output.get("jd_required_skills", [])
+    ats_before       = diagnoser_output.get("ats_score", 0)
 
     prompt = f"""
-You are an expert resume writer specialising in tech roles.
+You are a professional resume writer helping a candidate tailor their resume
+for a specific job. Your rewrites sound like a real person wrote them —
+confident, direct, human. Not AI-generated filler.
 
 CANDIDATE PROFILE:
 {candidate_context}
 
 TARGET JOB: {title} at {company}
-JOB DESCRIPTION:
+FULL JOB DESCRIPTION:
 {description}
 
-ATS MISSING KEYWORDS TO INCORPORATE (where truthful):
-{', '.join(missing_keywords)}
+JD REQUIRED SKILLS (use these exact terms where truthful):
+{", ".join(jd_required)}
 
-QUICK WIN SKILLS TO HIGHLIGHT IF PRESENT:
-{', '.join(quick_wins)}
+CANDIDATE ALREADY HAS THESE JD SKILLS (highlight prominently):
+{", ".join(present_keywords)}
 
-TASK:
-Rewrite the candidate's work experience bullet points using the Google XYZ formula:
-"Accomplished [X] as measured by [Y], by doing [Z]"
+THESE ARE MISSING FROM CANDIDATE (only incorporate if genuinely applicable):
+{", ".join(missing_keywords)}
 
-STRICT RULES:
-1. DO NOT invent skills or experiences not in the candidate profile
-2. DO NOT change the section structure (Education, Experience, Skills, etc.)
-3. DO NATURALLY incorporate ATS keywords where they honestly apply
-4. DO quantify impact wherever possible (use estimates if reasonable)
-5. Write in plain text — no markdown headers, no bullet symbols (use dashes)
-6. Keep it concise — max 4 bullet points per role
-7. End with a "Key Skills for this Role" section listing relevant skills only
+REWRITING RULES:
+1. Write in first person implied (no "I" — just the action): "Built...", "Designed...", "Led..."
+2. Use the XYZ formula naturally: "Built [X] that achieved [Y] by doing [Z]"
+   Bad:  "Accomplished ETL pipeline development as measured by data processing efficiency"
+   Good: "Built a metadata-driven ETL pipeline on Databricks that cut ingestion time by 40%"
+3. Use JD's exact terminology where the candidate has that skill
+   (e.g. if JD says "data pipeline orchestration" and candidate uses ADF, say "orchestrated pipelines using Azure Data Factory")
+4. Quantify with realistic estimates — don't invent, but don't be vague either
+5. Max 4 bullets per role, each 1-2 lines
+6. End with "Key Skills" listing only skills from BOTH the candidate AND the JD
+7. Do NOT mention skills the candidate does not have
+8. Sound like a senior engineer wrote this, not a career coach
 
-Output the rewritten experience section only (not the entire resume).
+OUTPUT FORMAT (plain text, no markdown):
+Experience
+[Company Name] — [Role Title]
+- [bullet 1]
+- [bullet 2]
+- [bullet 3]
+- [bullet 4]
+
+Key Skills for {title}:
+[comma-separated list]
 """
     try:
         rewritten = groq_text(
             system=(
-                "You are an expert resume writer. "
-                "Follow all instructions precisely. "
-                "Output plain text only."
+                "You are a professional resume writer. "
+                "Write like a human, not an AI. "
+                "Be specific to the JD. "
+                "Output plain text only, no markdown."
             ),
             user=prompt,
-            max_tokens=800,
+            max_tokens=900,
         )
     except Exception as e:
         print(f"    ⚠ Rewriter failed: {e}")
         rewritten = "Resume rewrite unavailable for this job."
 
-    print(f"    ✅ Rewriter complete ({len(rewritten)} chars)")
+    # Estimate post-rewrite ATS score: before + credit for each missing keyword
+    # now naturally incorporated. Cap at 95 — never claim 100.
+    incorporated = len([k for k in missing_keywords if k.lower() in rewritten.lower()])
+    ats_after = min(95, ats_before + (incorporated * 5))
+
+    print(f"    ✅ Rewriter complete — ATS {ats_before} → {ats_after} ({len(rewritten)} chars)")
     time.sleep(1)
-    return rewritten
+
+    return {
+        "rewritten_bullets": rewritten,
+        "ats_score_before":  ats_before,
+        "ats_score_after":   ats_after,
+    }
 
 # ──────────────────────────────────────────────────────────────────────────────
 # INTELLIGENCE LAYER — orchestrates all three actors
@@ -670,13 +784,15 @@ def run_intelligence_layer(
     recruiter = run_recruiter(job, candidate_context)
 
     print(f"    ✍️  Rewriter running...")
-    resume_content = run_rewriter(job, candidate_context, diagnoser, recruiter)
+    rewriter_output = run_rewriter(job, candidate_context, diagnoser, recruiter)
 
     return {
         **job,
         "diagnoser":               diagnoser,
         "recruiter":               recruiter,
-        "tailored_resume_content": resume_content,
+        "tailored_resume_content": rewriter_output.get("rewritten_bullets", ""),
+        "ats_score_before":        rewriter_output.get("ats_score_before", 0),
+        "ats_score_after":         rewriter_output.get("ats_score_after", 0),
     }
 
 # ──────────────────────────────────────────────────────────────────────────────
