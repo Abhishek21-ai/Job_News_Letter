@@ -78,18 +78,39 @@ Target Locations: {', '.join(profile.get('target_locations', []))}
 
 # ──────────────────────────────────────────────────────────────────────────────
 # LINKEDIN SEARCH URLS
-# f_TPR=r43200 = last 12 hours | f_E=2 = Entry level | f_WT=2 = Remote
+# f_TPR=r43200 = last 12 hours | f_WT=2 = Remote
+#
+# NOTE: f_E (seniority filter) intentionally removed from all URLs.
+# In India, most companies don't set seniority level correctly when posting.
+# A genuine 0-2yr Data Engineer role is often posted with no tag or tagged as
+# "Associate" (f_E=3) instead of "Entry" (f_E=2), causing valid jobs to be
+# silently dropped before Apify even scrapes them.
+# Seniority is enforced downstream via SENIOR_TITLE_KEYWORDS + Groq scorer.
+#
+# Two URLs per location: exact role + broader Python keyword.
+# Broader URLs catch roles posted as "Python Developer" or "Software Engineer"
+# that are actually data/backend engineering positions.
 # ──────────────────────────────────────────────────────────────────────────────
 
 LINKEDIN_SEARCH_URLS = [
-    "https://www.linkedin.com/jobs/search/?keywords=Data%20Engineer&location=Pune%2C%20Maharashtra%2C%20India&f_TPR=r43200&f_E=2",
-    "https://www.linkedin.com/jobs/search/?keywords=Backend%20Engineer%20Python%20FastAPI&location=Pune%2C%20Maharashtra%2C%20India&f_TPR=r43200&f_E=2",
-    "https://www.linkedin.com/jobs/search/?keywords=Data%20Engineer&location=Bengaluru%2C%20Karnataka%2C%20India&f_TPR=r43200&f_E=2",
-    "https://www.linkedin.com/jobs/search/?keywords=Backend%20Engineer%20Python%20FastAPI&location=Bengaluru%2C%20Karnataka%2C%20India&f_TPR=r43200&f_E=2",
-    "https://www.linkedin.com/jobs/search/?keywords=Data%20Engineer&location=Hyderabad%2C%20Telangana%2C%20India&f_TPR=r43200&f_E=2",
-    "https://www.linkedin.com/jobs/search/?keywords=Backend%20Engineer%20Python%20FastAPI&location=Hyderabad%2C%20Telangana%2C%20India&f_TPR=r43200&f_E=2",
-    "https://www.linkedin.com/jobs/search/?keywords=Backend%20Engineer%20Python%20FastAPI&location=India&f_TPR=r43200&f_E=2&f_WT=2",
-    "https://www.linkedin.com/jobs/search/?keywords=Associate%20Data%20Engineer%20Python&location=India&f_TPR=r43200&f_E=2&f_WT=2",
+    # ── PUNE ─────────────────────────────────────────────────────────────────
+    "https://www.linkedin.com/jobs/search/?keywords=Data%20Engineer&location=Pune%2C%20Maharashtra%2C%20India&f_TPR=r43200",
+    "https://www.linkedin.com/jobs/search/?keywords=Python%20Backend%20Engineer&location=Pune%2C%20Maharashtra%2C%20India&f_TPR=r43200",
+    "https://www.linkedin.com/jobs/search/?keywords=Python%20Developer&location=Pune%2C%20Maharashtra%2C%20India&f_TPR=r43200",
+
+    # ── BANGALORE ────────────────────────────────────────────────────────────
+    "https://www.linkedin.com/jobs/search/?keywords=Data%20Engineer&location=Bengaluru%2C%20Karnataka%2C%20India&f_TPR=r43200",
+    "https://www.linkedin.com/jobs/search/?keywords=Python%20Backend%20Engineer&location=Bengaluru%2C%20Karnataka%2C%20India&f_TPR=r43200",
+    "https://www.linkedin.com/jobs/search/?keywords=Python%20Developer&location=Bengaluru%2C%20Karnataka%2C%20India&f_TPR=r43200",
+
+    # ── HYDERABAD ────────────────────────────────────────────────────────────
+    "https://www.linkedin.com/jobs/search/?keywords=Data%20Engineer&location=Hyderabad%2C%20Telangana%2C%20India&f_TPR=r43200",
+    "https://www.linkedin.com/jobs/search/?keywords=Python%20Backend%20Engineer&location=Hyderabad%2C%20Telangana%2C%20India&f_TPR=r43200",
+
+    # ── REMOTE INDIA ──────────────────────────────────────────────────────────
+    "https://www.linkedin.com/jobs/search/?keywords=Data%20Engineer%20Python&location=India&f_TPR=r43200&f_WT=2",
+    "https://www.linkedin.com/jobs/search/?keywords=Backend%20Engineer%20Python&location=India&f_TPR=r43200&f_WT=2",
+    "https://www.linkedin.com/jobs/search/?keywords=Associate%20Data%20Engineer&location=India&f_TPR=r43200",
 ]
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -272,7 +293,7 @@ def scrape_linkedin_jobs() -> list[dict]:
     )
     resp = requests.post(
         run_url,
-        json={"urls": LINKEDIN_SEARCH_URLS, "count": 25, "scrapeCompany": False},
+        json={"urls": LINKEDIN_SEARCH_URLS, "count": 50, "scrapeCompany": False},
         timeout=30,
     )
     resp.raise_for_status()
