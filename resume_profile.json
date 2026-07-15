@@ -2,54 +2,88 @@
   "name": "Abhishek Pandey",
   "primary_roles": [
     "Software Development Engineer",
-    "Data Engineer"
+    "Data Engineering Intern"
   ],
   "skills": [
     "Python",
     "SQL",
+    "System Design",
+    "REST API Design",
+    "Microservices Architecture",
+    "Object-Oriented Design",
+    "Git",
+    "GitHub",
     "Databricks",
     "PySpark",
+    "Spark SQL",
     "Delta Lake",
     "Data Lakehouse",
+    "Snowflake",
+    "Hadoop",
     "ETL",
     "ELT",
     "Data Modeling",
     "Data Pipelines",
+    "Data Warehousing",
     "FastAPI",
     "REST APIs",
-    "Microservices Architecture",
     "PostgreSQL",
     "Apache Kafka",
     "Event-Driven Architecture",
+    "LLM Integration",
+    "LangChain",
+    "Retrieval-Augmented Generation",
+    "Vector Databases",
+    "Semantic Search & Embeddings",
+    "Quantitative/Technical Analysis",
+    "Apache Airflow",
+    "APScheduler",
+    "Apify",
     "GitHub Actions",
     "Databricks Asset Bundles",
     "Automated Deployments",
+    "Reltio",
     "Azure Data Factory",
     "ADLS Gen2",
     "Azure SQL",
-    "Splunk"
+    "Splunk",
+    "Agile",
+    "Scrum"
   ],
   "experience_level": "1.5 Years",
   "seniority": "junior",
   "core_strengths": [
     "Designing and building scalable ETL/ELT pipelines",
-    "Backend services and cloud-native data platforms",
+    "Data platforms",
+    "RESTful backend services",
     "Metadata-driven architectures",
     "Event-driven systems",
-    "Automated CI/CD workflows"
+    "Automated CI/CD workflows",
+    "AI engineering",
+    "LLM integration",
+    "LangChain",
+    "Retrieval-Augmented Generation",
+    "Vector search"
   ],
   "preferred_domains": [
     "Data Engineering",
-    "Backend Development",
-    "Cloud & Data Services"
+    "Backend Software Development",
+    "Applied AI/ML Systems"
   ],
   "certifications": [
-    "Databricks Certified Data Engineer Professional"
+    "Databricks Certified Data Engineer Professional",
+    "Reltio Certified Technical Consultant"
   ],
   "education": "Master of Science (M.Sc.) in Computer Science, Savitribai Phule Pune University 2024",
   "leadership_signals": [
-    "Led a 4-member team to deliver a governed self-service Data Product Platform",
-    "Managed project planning, requirement gathering, stakeholder communication, and successful delivery across multiple parallel engagements"
+    "Led backend development of UDAP WILD",
+    "Delivered 4 core platform capabilities end-to-end",
+    "Designed and developed scalable RESTful APIs",
+    "Built and optimized metadata synchronization ETL pipelines",
+    "Architected Kafka-based event triggers",
+    "Designed data archival and lifecycle management workflows",
+    "Implemented CI/CD automation for Databricks job deployments",
+    "Integrated centralized logging"
   ],
   "target_locations": [
     "Pune",
